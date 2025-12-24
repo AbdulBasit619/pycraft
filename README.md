@@ -35,11 +35,15 @@ Use responsibly.
 ## 📂 Repository Structure
 
 Each folder in this repository represents a **separate project or experiment**:
-pycraft/
-├── project_1/
-├── project_2/
-├── random_experiment/
-└── README.md
+
+  pycraft/
+  ├── project_1/
+  
+  ├── project_2/
+  
+  ├── random_experiment/
+  
+  └── README.md
 
 Projects are independent and may have different requirements.
 
