@@ -37,6 +37,7 @@ Use responsibly.
 Each folder in this repository represents a **separate project or experiment**:
 
   pycraft/
+  
   ├── project_1/
   
   ├── project_2/
