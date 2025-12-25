@@ -1,7 +1,7 @@
 # pycraft
 🐍 pycraft -> my Python chaos, neat, clean and organized (mostly!)
 
-**pycraft** is my personal Python playground — a collection of experiments, side quests, tests, and curious ideas built purely out of interest and fun.
+**pycraft** is my personal Python playground: a collection of experiments, side quests, tests, and curious ideas built purely out of interest and fun.
 
 This repository is a **learning space**, not a polished product. Some projects may be incomplete, messy, or experimental by design.
 
@@ -36,9 +36,13 @@ Use responsibly.
 
 Each folder in this repository represents a **separate project or experiment**:
 pycraft/
+
 ├── project_1/
+
 ├── project_2/
+
 ├── random_experiment/
+
 └── README.md
 
 Projects are independent and may have different requirements.
@@ -63,4 +67,10 @@ A brief explanation of what this project is about and what problem or idea it ex
 #### ▶️ How to Run
 ```bash
 python -u "path/to/file.py"
+```
 
+---
+<p style="text-align: center; font-style: italic;">
+🐍 Hope you enjoy exploring these scripts as much as I enjoyed creating them!
+Most importantly, have fun! 🎉
+</p>
