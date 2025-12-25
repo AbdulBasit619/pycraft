@@ -71,6 +71,6 @@ python -u "path/to/file.py"
 
 ---
 
-##### _🐍 Hope you enjoy exploring these scripts as much as I enjoyed creating them!_
-##### _Most importantly, have fun! 🎉_
+#####               _🐍 Hope you enjoy exploring these scripts as much as I enjoyed creating them!_
+#####                                       _Most importantly, have fun! 🎉_
 
