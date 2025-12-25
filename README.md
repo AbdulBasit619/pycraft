@@ -1,5 +1,5 @@
 # 🐍 pycraft
-                _🐍 pycraft -> my Python chaos, neat, clean and organized (mostly!)_
+                    _🐍 pycraft -> my Python chaos, neat, clean and organized (mostly!)_
 
 **pycraft** is my personal Python playground: a collection of experiments, side quests, tests, and curious ideas built purely out of interest and fun.
 
@@ -71,6 +71,6 @@ python -u "path/to/file.py"
 
 ---
 
-### _🐍 Hope you enjoy exploring these scripts as much as I enjoyed creating them!_
-### _Most importantly, have fun! 🎉_
+##### _🐍 Hope you enjoy exploring these scripts as much as I enjoyed creating them!_
+##### _Most importantly, have fun! 🎉_
 
