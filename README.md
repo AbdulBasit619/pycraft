@@ -1,5 +1,5 @@
-# pycraft
-🐍 pycraft -> my Python chaos, neat, clean and organized (mostly!)
+# 🐍 pycraft
+                _🐍 pycraft -> my Python chaos, neat, clean and organized (mostly!)_
 
 **pycraft** is my personal Python playground: a collection of experiments, side quests, tests, and curious ideas built purely out of interest and fun.
 
@@ -34,7 +34,7 @@ Use responsibly.
 
 ## 📂 Repository Structure
 
-Each folder in this repository represents a **separate project or experiment**:
+Each folder in this repository represents a **separate project or experiment**, much like this:
 pycraft/
 
 ├── project_1/
@@ -70,7 +70,7 @@ python -u "path/to/file.py"
 ```
 
 ---
-<p style="text-align: center; font-style: italic;">
-🐍 Hope you enjoy exploring these scripts as much as I enjoyed creating them!
-Most importantly, have fun! 🎉
-</p>
+
+### _🐍 Hope you enjoy exploring these scripts as much as I enjoyed creating them!_
+### _Most importantly, have fun! 🎉_
+
