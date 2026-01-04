@@ -35,19 +35,32 @@ class LinkedList:
         """Return a Node instance for the given value (no operation for Node input)."""
         return value if isinstance(value, Node) else Node(value)
 
-    def add(self, node):
+    def add(self, node, index=None):
         """Add a node or value to the end of a Linked List."""
 
         # allow passing Node or value
         node = self._ensure_node(node)
 
-        if self.head.get_value() is None:
+        # If index is none, add to the end of list,
+        # otherwise add at the index
+        if index is None:
+            index = self.size
+
+        # Add at a specific index.
+        if index == 0:
+            # Add at head.
+            node.set_next_node(self.head)
             self.head = node
         else:
+            # Add at specific index
             current = self.head
-            while current.get_next_node():
+            _ = 0
+            while _ < (index - 1):
                 current = current.get_next_node()
+                _ = _ + 1
+            node.set_next_node(current.get_next_node())
             current.set_next_node(node)
+
         self.size += 1
 
     def remove(self, value):
@@ -56,10 +69,10 @@ class LinkedList:
         prev = None
 
         # allow passing Node or value
-        value = self._ensure_node(value)
+        node = self._ensure_node(value)
 
         while current:
-            if current.get_value() == value.get_value():
+            if current.get_value() == node.get_value():
                 if prev:
                     prev.set_next_node(current.get_next_node())
                 else:
@@ -95,10 +108,14 @@ class LinkedList:
             return
         current = self.head
         while current:
-            print(current.get_value(), end="")
-            current = current.get_next_node()
-            if current:
+            if current.get_value() is not None:
+                print(current.get_value(), end="")
+            if (
+                current.get_next_node()
+                and current.get_next_node().get_value() is not None
+            ):
                 print(" -> ", end="")
+            current = current.get_next_node()
         print()
 
 
@@ -106,6 +123,7 @@ class LinkedList:
 
 # Create a linked list
 linked_list = LinkedList()
+print(linked_list)
 
 # Add nodes
 for i in range(0, 50, 5):
@@ -113,6 +131,11 @@ for i in range(0, 50, 5):
 
 # Print linked list
 linked_list.print_list()
+
+linked_list.add(100, 3)
+linked_list.add(Node(150), 6)
+linked_list.print_list()
+print("\n")
 
 # Find a node
 value_to_find = 30
@@ -122,8 +145,8 @@ if found_node:
 else:
     print(f"Node with value {value_to_find} not found.")
 
-print("\n")
 linked_list.print_list()
+print("\n")
 
 # Remove a node
 value_to_remove = 30
@@ -132,8 +155,8 @@ if linked_list.remove(value_to_remove):
 else:
     print(f"Node with value {value_to_remove} not found.")
 
-print("\n")
 linked_list.print_list()
+print("\n")
 
 print("\nSize of list:")
 print(linked_list.get_size())
