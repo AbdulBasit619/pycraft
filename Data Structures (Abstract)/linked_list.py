@@ -53,13 +53,16 @@ class LinkedList:
             self.head = node
         else:
             # Add at specific index
+            if index > self.size:
+                index = self.size
             current = self.head
             _ = 0
-            while _ < (index - 1):
+            while _ < (index - 1) and current:
                 current = current.get_next_node()
                 _ = _ + 1
-            node.set_next_node(current.get_next_node())
-            current.set_next_node(node)
+            if current:
+                node.set_next_node(current.get_next_node())
+                current.set_next_node(node)
 
         self.size += 1
 
@@ -110,10 +113,8 @@ class LinkedList:
         while current:
             if current.get_value() is not None:
                 print(current.get_value(), end="")
-            if (
-                current.get_next_node()
-                and current.get_next_node().get_value() is not None
-            ):
+            next_node = current.get_next_node()
+            if next_node is not None and next_node.get_value() is not None:
                 print(" -> ", end="")
             current = current.get_next_node()
         print()
