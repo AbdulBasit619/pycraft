@@ -67,6 +67,7 @@ class Lexer:
         pos = 0  # Track current scanning position
 
         for match in self.master_pattern.finditer(sql):
+            print(match)
             start, end = match.span()
 
             # Detect unexpected characters between tokens
