@@ -16,7 +16,7 @@ class Table:
 
     def insert(self, row):
         """Insert a row into the table."""
-        self.rows.append(row)
+        self.rows.append(dict(zip(self.columns, row)))
 
     def select(self, columns=None, condition=None):
         """Select rows from the table based on the given criteria."""
