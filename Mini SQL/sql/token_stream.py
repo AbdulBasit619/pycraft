@@ -47,11 +47,15 @@ class TokenStream:
                 f"Expected token type {token_type}, but found {token.type}",
                 position=token.position,
             )
+        self.advance()
         return token
 
     def match(self, token_type):
         """Check if the current token matches the given type (returns True/False)."""
-        return self.current().type == token_type
+        if self.current().type == token_type:
+            self.advance()
+            return True
+        return False
 
     def consume(self):
         """Return the current token and advance the stream by one."""
