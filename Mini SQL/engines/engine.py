@@ -1,4 +1,5 @@
 from sql.lexer import Lexer
+from sql.token_stream import TokenStream
 
 # A class to build the engine layer,
 # responsible for interacting with database
@@ -20,13 +21,30 @@ class Engine:
         # In a real implementation, this method would need to parse the SQL string,
         # determine the command type (SELECT, INSERT, UPDATE, DELETE, etc.),
         # and then call the appropriate methods on the database and tables.
-        print(f"Executing SQL: {sql}")
+        print("=== Raw SQL ===")
+        print(sql)
 
         lexer = Lexer()
 
         # Tokenize the Normalized SQL Query
         tokens = lexer.tokenize(sql)
+        print("=== Tokens ===")
+        for t in tokens:
+            print(t)
 
-        # Determine the query type
-        query_type = lexer.determine_query_type(tokens)
-        print(query_type)
+        # Convert to token stream
+        token_stream = TokenStream(tokens)
+        # print(token_stream.current())
+        # print(token_stream.expect("SELECT"))
+        # print(token_stream.expect("SELECT"))
+        # print(token_stream.peek(5))
+        # print(token_stream.at_end())
+        # print(token_stream.consume())
+        # token_stream.advance()
+        # print(token_stream.current())
+        # token_stream.reset()
+        # print(token_stream.current())
+
+        # # Determine the query type
+        # query_type = lexer.determine_query_type(tokens)
+        # print(query_type)

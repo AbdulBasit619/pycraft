@@ -16,3 +16,7 @@ class LexerError(Exception):
 
 class UnexpectedCharacterError(LexerError):
     pass
+
+
+class ParserError(LexerError):
+    pass
