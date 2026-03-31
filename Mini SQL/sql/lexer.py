@@ -12,7 +12,7 @@ class Token:
     position: int
 
     def __repr__(self):
-        return f"{self.type}('{self.value}' =>   {self.position})"
+        return f"{self.type}('{self.value}' => {self.position})"
 
 
 class Lexer:
@@ -105,7 +105,7 @@ class Lexer:
             )
         tokens.append(Token("EOF", "", len(sql)))
 
-        print(tokens)
+        # print(tokens)
         return tokens
 
     def determine_query_type(self, tokens):

@@ -1,5 +1,6 @@
 from sql.lexer import Lexer
 from sql.token_stream import TokenStream
+from sql.parser import Parser
 
 # A class to build the engine layer,
 # responsible for interacting with database
@@ -16,21 +17,21 @@ class Engine:
         self.database = database
 
     def execute(self, sql):
-        """Execute an SQL command, after normalization, tokenization and parsing."""
+        """Execute an SQL statement."""
         # This is a placeholder for SQL parsing and execution logic.
         # In a real implementation, this method would need to parse the SQL string,
         # determine the command type (SELECT, INSERT, UPDATE, DELETE, etc.),
         # and then call the appropriate methods on the database and tables.
-        print("=== Raw SQL ===")
-        print(sql)
+        # print("=== Raw SQL ===")
+        # print(sql)
 
         lexer = Lexer()
 
         # Tokenize the Normalized SQL Query
         tokens = lexer.tokenize(sql)
-        print("=== Tokens ===")
-        for t in tokens:
-            print(t)
+        # print("=== Tokens ===")
+        # for t in tokens:
+        #     print(t)
 
         # Convert to token stream
         token_stream = TokenStream(tokens)
@@ -45,6 +46,10 @@ class Engine:
         # token_stream.reset()
         # print(token_stream.current())
 
+        # Parse
+        parser = Parser(token_stream)
+        ast = parser.parse()
+        print(ast)
         # # Determine the query type
         # query_type = lexer.determine_query_type(tokens)
         # print(query_type)
