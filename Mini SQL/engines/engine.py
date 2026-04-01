@@ -35,21 +35,12 @@ class Engine:
 
         # Convert to token stream
         token_stream = TokenStream(tokens)
-        # print(token_stream.current())
-        # print(token_stream.expect("SELECT"))
-        # print(token_stream.expect("SELECT"))
-        # print(token_stream.peek(5))
-        # print(token_stream.at_end())
-        # print(token_stream.consume())
-        # token_stream.advance()
-        # print(token_stream.current())
-        # token_stream.reset()
-        # print(token_stream.current())
 
         # Parse
         parser = Parser(token_stream)
         ast = parser.parse()
         print(ast)
+
         # # Determine the query type
         # query_type = lexer.determine_query_type(tokens)
         # print(query_type)

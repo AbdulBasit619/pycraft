@@ -30,4 +30,20 @@ class ConditionNode:
         self.right = right
 
     def __repr__(self):
-        return f"ConditionNode(left={self.left}, operator={self.operator}, right={self.right})"
+        if isinstance(self.right, str):
+            right_repr = f"'{self.right}'"
+        else:
+            right_repr = self.right
+        return f"ConditionNode(left={self.left}, operator={self.operator}, right={right_repr})"
+
+
+class LogicalNode:
+    """AST Node representing logical conditions."""
+
+    def __init__(self, left, operator, right):
+        self.left = left
+        self.operator = operator
+        self.right = right
+
+    def __repr__(self):
+        return f"LogicalNode(left={self.left}, operator={self.operator}, right={self.right})"

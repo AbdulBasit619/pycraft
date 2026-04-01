@@ -1,16 +1,18 @@
 # Grammar (Phase 2 - WHERE clause)
 #
-# SELECT_STATEMENT → SELECT COLUMN_LIST FROM TABLE WHERE CONDITION SEMICOLON
+# SELECT_STATEMENT → SELECT COLUMN_LIST FROM TABLE WHERE EXPRESSION SEMICOLON
 #
-# COLUMN_LIST → * | IDENTIFIER (COMMA IDENTIFIER)*
+# COLUMN_LIST → * | IDENTIFIER ( COMMA IDENTIFIER )*
 #
 # TABLE → IDENTIFIER
+#
+# EXPRESSION → CONDITION ( (AND | OR) CONDITION )*
 #
 # CONDITION → IDENTIFIER OPERATOR VALUE
 #
 # VALUE → NUMBER | STRING
 
-from sql.ast_nodes import SelectNode, AllColumnsNode, ConditionNode
+from sql.ast_nodes import SelectNode, AllColumnsNode, ConditionNode, LogicalNode
 from utils.exceptions import ParserError
 
 
@@ -75,7 +77,7 @@ class Parser:
         Parse the table column.
 
         CFG:
-        COLUMN_LIST → * | IDENTIFIER (COMMA IDENTIFIER)*
+        COLUMN_LIST → * | IDENTIFIER ( COMMA IDENTIFIER )*
         """
         print("[Parser] Parsing columns")
 
@@ -142,7 +144,26 @@ class Parser:
         # If next token is WHERE, consume it and move forward.
         self.tokens.consume()
 
-        return self.parse_condition()
+        return self.parse_expression()
+
+    def parse_expression(self):
+        """
+        Parse the expression after WHERE statement.
+
+        CFG:\n
+        EXPRESSION → CONDITION ( (AND | OR) CONDITION )*
+        """
+
+        left = self.parse_condition()
+
+        while self.tokens.match("AND") or self.tokens.match("OR"):
+            operator = self.tokens.current().value
+            self.tokens.consume()
+
+            right = self.parse_condition()
+            left = LogicalNode(left, operator, right)
+
+        return left
 
     def parse_condition(self):
         """
