@@ -13,6 +13,8 @@ def run_sql():
     # eng.execute("SELECT name, age FROM users WHERE age >= 18 AND name = 'Bob';")
     eng.execute("SELECT name, age, salary FROM users")
     eng.execute("SELECT * FROM users")
+    eng.execute("SELECT name FROM users WHERE age >= 18;")
+    eng.execute("SELECT name FROM users WHERE name >= 'Bob';")
 
 
 if __name__ == "__main__":

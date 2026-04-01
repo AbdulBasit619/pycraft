@@ -1,13 +1,16 @@
-# Grammar (Phase 1 - Minimal)
+# Grammar (Phase 2 - WHERE clause)
 #
-# SELECT_STATEMENT → SELECT COLUMN_LIST FROM TABLE SEMICOLON
+# SELECT_STATEMENT → SELECT COLUMN_LIST FROM TABLE WHERE CONDITION SEMICOLON
 #
-# COLUMN_LIST → IDENTIFIER (COMMA IDENTIFIER)*
+# COLUMN_LIST → * | IDENTIFIER (COMMA IDENTIFIER)*
 #
 # TABLE → IDENTIFIER
+#
+# CONDITION → IDENTIFIER OPERATOR VALUE
+#
+# VALUE → NUMBER | STRING
 
-from sql.ast_nodes import SelectNode
-from sql.ast_nodes import AllColumnsNode
+from sql.ast_nodes import SelectNode, AllColumnsNode, ConditionNode
 from utils.exceptions import ParserError
 
 
@@ -35,7 +38,7 @@ class Parser:
         # First token must be SELECT, otherwise raise syntax error.
         self.tokens.expect("SELECT")
 
-        # If first token is SELECT, move forward.
+        # If first token is SELECT, consume it and move forward.
         self.tokens.consume()
 
         ###
@@ -46,7 +49,7 @@ class Parser:
         # Next token must be FROM, otherwise raise syntax error.
         self.tokens.expect("FROM")
 
-        # If next token is FROM, move forward.
+        # If next token is FROM, consume it and move forward.
         self.tokens.consume()
 
         ###
@@ -54,11 +57,18 @@ class Parser:
         table = self.parse_table()
 
         ###
+        # Optionally parse WHERE clause
+        if self.tokens.match("WHERE"):
+            where_clause = self.parse_where()
+        else:
+            where_clause = None
+
+        ###
         # Optionally parse SEMICOLON
         if self.tokens.match("SEMICOLON"):
             self.tokens.consume()
 
-        return SelectNode(columns, table)
+        return SelectNode(columns, table, where_clause)
 
     def parse_columns(self):
         """
@@ -106,11 +116,100 @@ class Parser:
         TABLE → IDENTIFIER
         """
         print("[Parser] Parsing table")
+
         # Token must be an identifier, otherwise raise syntax error.
         token = self.tokens.expect("IDENTIFIER")
         table_name = token.value
 
-        # If token is an identifier, move forward.
+        # If token is an identifier, consume it and move forward.
         self.tokens.consume()
 
         return table_name
+
+    def parse_where(self):
+        """
+        Parse the WHERE statement.
+
+        CFG:\n
+        WHERE → CONDITION
+        """
+
+        print("[Parser] Parsing conditions")
+
+        # Token must be WHERE, otherwise raise syntax error.
+        self.tokens.expect("WHERE")
+
+        # If next token is WHERE, consume it and move forward.
+        self.tokens.consume()
+
+        return self.parse_condition()
+
+    def parse_condition(self):
+        """
+        Parse the conditions after WHERE statement.
+
+        CFG:\n
+        CONDITION → IDENTIFIER OPERATOR VALUE
+        """
+        print("[Parser] Parsing WHERE condition")
+
+        ###
+        # Token must be an identifier, otherwise raise syntax error.
+        token = self.tokens.expect("IDENTIFIER")
+        column_name = token.value
+
+        # If token is an identifier, consume it and move forward.
+        self.tokens.consume()
+
+        ###
+        # Next token must be OPERATOR, otherwise raise syntax error.
+        token = self.tokens.expect("OPERATOR")
+        operator = token.value
+
+        # If token is an OPERATOR, consume it and move forward.
+        self.tokens.consume()
+
+        ###
+        # Next token must be VALUE, otherwise raise syntax error.
+        value = self.parse_value()
+
+        return ConditionNode(column_name, operator, value)
+
+    def parse_value(self):
+        """
+        Parse the condition VALUES.
+
+        CFG:\n
+        VALUE → NUMBER | STRING
+        """
+
+        ###
+        # Parse either a number or a string as value.
+
+        # Check for NUMBER
+        if self.tokens.match("NUMBER"):
+
+            # If token is a number, consume it and move forward.
+            token = self.tokens.consume()
+
+            # Convert to int or float
+            if "." in token.value:
+                return float(token.value)
+            return int(token.value)
+
+        # Check for STRING
+        elif self.tokens.match("STRING"):
+
+            # If token is a string, consume it and move forward.
+            token = self.tokens.consume()
+
+            # Remove surrounding quotes
+            return token.value[1:-1]
+
+        else:
+
+            current = self.tokens.current()
+            raise ParserError(
+                f"Expected NUMBER or STRING, but found {current.type}",
+                position=current.position,
+            )
