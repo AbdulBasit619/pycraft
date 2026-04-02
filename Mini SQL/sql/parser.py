@@ -1,18 +1,35 @@
 # Grammar (Phase 2 - WHERE clause)
 #
-# SELECT_STATEMENT → SELECT COLUMN_LIST FROM TABLE WHERE EXPRESSION SEMICOLON
+# SELECT_STATEMENT → SELECT COLUMN_LIST FROM TABLE WHERE EXPRESSION ORDER BY ORDER_LIST SEMICOLON
 #
 # COLUMN_LIST → * | IDENTIFIER ( COMMA IDENTIFIER )*
 #
 # TABLE → IDENTIFIER
 #
-# EXPRESSION → CONDITION ( (AND | OR) CONDITION )*
+# EXPRESSION → TERM ( (OR) TERM )*
+#
+# TERM → FACTOR ( (AND) FACTOR )*
+#
+# FACTOR → NOT FACTOR
+#        | CONDITION
+#        | LPAREN EXPRESSION RPAREN
 #
 # CONDITION → IDENTIFIER OPERATOR VALUE
 #
 # VALUE → NUMBER | STRING
+#
+# ORDER_LIST → ORDER_ITEM ( COMMA ORDER_ITEM )*
+#
+# ORDER_ITEM → IDENTIFIER ( ASC | DESC )
 
-from sql.ast_nodes import SelectNode, AllColumnsNode, ConditionNode, LogicalNode
+from sql.ast_nodes import (
+    SelectNode,
+    AllColumnsNode,
+    ConditionNode,
+    LogicalNode,
+    NotNode,
+    OrderByNode,
+)
 from utils.exceptions import ParserError
 
 
@@ -32,7 +49,7 @@ class Parser:
         Parse the SELECT statement.
 
         CFG:\n
-        SELECT_STATEMENT → SELECT COLUMN_LIST FROM TABLE SEMICOLON
+        SELECT_STATEMENT → SELECT COLUMN_LIST FROM TABLE WHERE EXPRESSION ORDER BY ORDER_LIST SEMICOLON
         """
         print("[Parser] Parsing SELECT statement")
 
@@ -55,7 +72,7 @@ class Parser:
         self.tokens.consume()
 
         ###
-        # Recursively Descent to parsing table
+        # Recursively Descent to parsing table.
         table = self.parse_table()
 
         ###
@@ -66,11 +83,18 @@ class Parser:
             where_clause = None
 
         ###
+        # Optionally parse ORDER BY
+        if self.tokens.match("ORDER"):
+            order_by = self.parse_order()
+        else:
+            order_by = None
+
+        ###
         # Optionally parse SEMICOLON
         if self.tokens.match("SEMICOLON"):
             self.tokens.consume()
 
-        return SelectNode(columns, table, where_clause)
+        return SelectNode(columns, table, where_clause, order_by)
 
     def parse_columns(self):
         """
@@ -79,7 +103,7 @@ class Parser:
         CFG:
         COLUMN_LIST → * | IDENTIFIER ( COMMA IDENTIFIER )*
         """
-        print("[Parser] Parsing columns")
+        print("[Parser] Parsing COLUMN_LIST")
 
         columns = []
 
@@ -117,7 +141,7 @@ class Parser:
         CFG:\n
         TABLE → IDENTIFIER
         """
-        print("[Parser] Parsing table")
+        print("[Parser] Parsing TABLE")
 
         # Token must be an identifier, otherwise raise syntax error.
         token = self.tokens.expect("IDENTIFIER")
@@ -131,12 +155,9 @@ class Parser:
     def parse_where(self):
         """
         Parse the WHERE statement.
-
-        CFG:\n
-        WHERE → CONDITION
         """
 
-        print("[Parser] Parsing conditions")
+        print("[Parser] Parsing WHERE conditions.")
 
         # Token must be WHERE, otherwise raise syntax error.
         self.tokens.expect("WHERE")
@@ -151,19 +172,99 @@ class Parser:
         Parse the expression after WHERE statement.
 
         CFG:\n
-        EXPRESSION → CONDITION ( (AND | OR) CONDITION )*
+        EXPRESSION → TERM ( (OR) TERM )*
         """
 
-        left = self.parse_condition()
+        print("[Parser] Parsing EXPRESSION")
 
-        while self.tokens.match("AND") or self.tokens.match("OR"):
-            operator = self.tokens.current().value
+        # Parse TERM
+        left = self.parse_term()
+
+        # Next token must be OR, otherwise raise syntax error.
+        while self.tokens.match("OR"):
+
+            # If token is OR, consume it and move forward.
             self.tokens.consume()
 
-            right = self.parse_condition()
-            left = LogicalNode(left, operator, right)
+            # Parse TERM
+            right = self.parse_term()
 
+            # If all done correctly, create a LogicalNode.
+            left = LogicalNode(left, "OR", right)
+
+        # Return either the simple TERM or a LogicalNode.
         return left
+
+    def parse_term(self):
+        """
+        Parse the TERM.
+
+        CFG:\n
+        TERM → FACTOR ( (AND) FACTOR)*
+        """
+
+        print("[Parser] Parsing TERM")
+
+        # Parse FACTOR
+        left = self.parse_factor()
+
+        # Next token must be AND, otherwise raise syntax error.
+        while self.tokens.match("AND"):
+
+            # If token is AND, consume it and move forward.
+            self.tokens.consume()
+
+            # Parse FACTOR
+            right = self.parse_factor()
+
+            # If all done correctly, finally create a LogicalNode.
+            left = LogicalNode(left, "AND", right)
+
+        # Return either the simple FACTOR or LogicalNode
+        return left
+
+    def parse_factor(self):
+        """
+        Parse the FACTOR.
+
+        CFG:\n
+        FACTOR → NOT FACTOR
+               | CONDITION
+               | LPAREN EXPRESSION RPAREN
+        """
+
+        print("[Parser] Parsing FACTOR")
+
+        # Token must be NOT, otherwise raise syntax error.
+        if self.tokens.match("NOT"):
+            # If token is NOT, consume it and move forward.
+            self.tokens.consume()
+
+            # Parse FACTOR recursively
+            child = self.parse_factor()
+
+            return NotNode(child)
+
+        # Token must be (, otherwise raise syntax error.
+        if self.tokens.match("LPAREN"):
+            # If token is (, consume it and move forward.
+            self.tokens.consume()
+
+            # Parse EXPRESSION recursively.
+            expr = self.parse_expression()
+
+            # Token must be ), otherwise raise syntax error.
+            self.tokens.expect("RPAREN")
+
+            # If token is ), consume it and move forward.
+            self.tokens.consume()
+
+            # Return EXPRESSION
+            return expr
+
+        # If token is not (, then parse CONDITION and return it.
+        else:
+            return self.parse_condition()
 
     def parse_condition(self):
         """
@@ -172,7 +273,7 @@ class Parser:
         CFG:\n
         CONDITION → IDENTIFIER OPERATOR VALUE
         """
-        print("[Parser] Parsing WHERE condition")
+        print("[Parser] Parsing CONDITION")
 
         ###
         # Token must be an identifier, otherwise raise syntax error.
@@ -234,3 +335,60 @@ class Parser:
                 f"Expected NUMBER or STRING, but found {current.type}",
                 position=current.position,
             )
+
+    def parse_order(self):
+        """
+        Parse ORDER BY clause.
+
+        CFG:
+        ORDER_BY → ORDER BY ORDER_LIST
+
+        ORDER_LIST → ORDER_ITEM (COMMA ORDER_ITEM)*
+
+        ORDER_ITEM → IDENTIFIER (ASC | DESC)
+        """
+
+        print("[Parser] Parsing ORDER BY")
+
+        # Expect ORDER
+        self.tokens.expect("ORDER")
+        self.tokens.consume()
+
+        # Expect BY
+        self.tokens.expect("BY")
+        self.tokens.consume()
+
+        items = []
+
+        # First item (mandatory)
+        token = self.tokens.expect("IDENTIFIER")
+        column_name = token.value
+        self.tokens.consume()
+
+        direction = "ASC"
+        if self.tokens.match("ASC"):
+            self.tokens.consume()
+        elif self.tokens.match("DESC"):
+            self.tokens.consume()
+            direction = "DESC"
+
+        items.append((column_name, direction))
+
+        # Remaining items
+        while self.tokens.match("COMMA"):
+            self.tokens.consume()
+
+            token = self.tokens.expect("IDENTIFIER")
+            column_name = token.value
+            self.tokens.consume()
+
+            direction = "ASC"
+            if self.tokens.match("ASC"):
+                self.tokens.consume()
+            elif self.tokens.match("DESC"):
+                self.tokens.consume()
+                direction = "DESC"
+
+            items.append((column_name, direction))
+
+        return OrderByNode(items)

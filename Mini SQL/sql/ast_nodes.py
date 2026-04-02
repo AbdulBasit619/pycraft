@@ -5,13 +5,14 @@
 class SelectNode:
     """AST Node representing SELECT query."""
 
-    def __init__(self, columns, table, where_clause=None):
+    def __init__(self, columns, table, where_clause=None, order_by=None):
         self.columns = columns
         self.table = table
         self.where_clause = where_clause
+        self.order_by = order_by
 
     def __repr__(self):
-        return f"SelectNode(columns={self.columns}, table='{self.table}', where_clause={self.where_clause})"
+        return f"SelectNode(columns={self.columns}, table='{self.table}', where_clause={self.where_clause}, order_by={self.order_by})"
 
 
 class AllColumnsNode:
@@ -47,3 +48,24 @@ class LogicalNode:
 
     def __repr__(self):
         return f"LogicalNode(left={self.left}, operator={self.operator}, right={self.right})"
+
+
+class NotNode:
+    """AST Node representing negation."""
+
+    def __init__(self, child):
+        self.child = child
+
+    def __repr__(self):
+        return f"NotNode({self.child})"
+
+
+class OrderByNode:
+    """AST Node representing ORDER BY clause."""
+
+    def __init__(self, items):
+        self.items = items
+
+    def __repr__(self):
+        parts = [f"{col}: {dir}" for col, dir in self.items]
+        return f"OrderByNode({', '.join(parts)})"

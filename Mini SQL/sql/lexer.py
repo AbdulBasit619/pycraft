@@ -30,6 +30,10 @@ class Lexer:
         "AND",
         "OR",
         "NOT",
+        "ORDER",
+        "BY",
+        "ASC",
+        "DESC",
     }
 
     TOKEN_SPEC = [
