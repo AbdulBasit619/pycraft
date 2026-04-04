@@ -1,4 +1,4 @@
-# Grammar (Phase 3 - CREATE statement)
+# Grammar (Phase 4 - minimal INSERT)
 #
 # SELECT_STATEMENT → SELECT COLUMN_LIST FROM TABLE_NAME WHERE EXPRESSION ORDER BY ORDER_LIST SEMICOLON?
 # CREATE_STATEMENT → CREATE DATABASE IDENTIFIER SEMICOLON?
@@ -190,13 +190,24 @@ class Parser:
         print("[Parser] Parsing COLUMN_LIST")
 
         if self.tokens.match("STAR"):
-            token = AllColumnsNode()
             self.tokens.consume()
-            return token
-        else:
-            columns = self.parse_column_def_list()
+            return AllColumnsNode()
 
-        return columns
+        columns = []
+
+        # First column is mandatory
+        column_name = self.tokens.expect("IDENTIFIER").value
+        self.tokens.consume()
+        columns.append(column_name)
+
+        # Remaining columns
+        while self.tokens.match("COMMA"):
+            self.tokens.consume()
+            column_name = self.tokens.expect("IDENTIFIER").value
+            self.tokens.consume()
+            columns.append(column_name)
+
+            return columns
 
     def parse_column_def_list(self):
         """
@@ -205,6 +216,8 @@ class Parser:
         CFG:\n
         COLUMN_DEF_LIST → COLUMN_DEF (COMMA COLUMN_DEF)*
         """
+
+        print("[Parser] Parsing COLUMN_DEF_LIST")
 
         columns = []
 
@@ -228,6 +241,8 @@ class Parser:
         CFG:\n
         COLUMN_DEF → IDENTIFIER DATA_TYPE (PRIMARY_KEY)?
         """
+
+        print("[Parser] Parsing COLUMN_DEF")
 
         # Token must be an identifier, otherwise raise syntax error.
         column_name = self.tokens.expect("IDENTIFIER").value
@@ -254,11 +269,12 @@ class Parser:
         DATA_TYPE → IDENTIFIER ( TYPE_PARAM )?
         """
 
+        print("[Parser] Parsing DATA_TYPE")
+
         data_type = self.tokens.expect("IDENTIFIER").value
         self.tokens.consume()
 
         type_param = None
-
         if self.tokens.match("LPAREN"):
             type_param = self.parse_typeparam()
 
@@ -272,7 +288,10 @@ class Parser:
         TYPE_PARAM → LPAREN NUMBER RPAREN
         """
 
-        self.tokens.consume("LPAREN")
+        print("[Parser] Parsing TYPE_PARAM")
+
+        self.tokens.expect("LPAREN")
+        self.tokens.consume()
 
         size = int(self.tokens.expect("NUMBER").value)
         self.tokens.consume()
@@ -447,11 +466,13 @@ class Parser:
 
     def parse_value(self):
         """
-        Parse the condition VALUES.
+        Parse the condition VALUEs.
 
         CFG:\n
         VALUE → NUMBER | STRING
         """
+
+        print("[Parser] Parsing VALUEs")
 
         ###
         # Parse either a number or a string as value.

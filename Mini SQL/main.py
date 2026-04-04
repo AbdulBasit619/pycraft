@@ -12,7 +12,7 @@ def run_sql():
     eng.execute(
         "SELECT name, age FROM users WHERE name = 'Bob' AND NOT (id = 2 OR age >= 30) ORDER BY name DESC, age ASC;"
     )
-    eng.execute("CREATE TABLE users (id, name, age);")
+    eng.execute("CREATE TABLE users (id INT PRIMARY KEY, name VARCHAR(30), age INT);")
 
 
 if __name__ == "__main__":
