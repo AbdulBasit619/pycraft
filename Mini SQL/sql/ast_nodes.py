@@ -69,3 +69,40 @@ class OrderByNode:
     def __repr__(self):
         parts = [f"{col}: {dir}" for col, dir in self.items]
         return f"OrderByNode({', '.join(parts)})"
+
+
+class CreateNode:
+    """AST Node representing all CREATE query."""
+
+    def __init__(self, object_type, name, definition=None):
+        self.object_type = object_type
+        self.name = name
+        self.definition = definition
+
+    def __repr__(self):
+        if self.definition is not None:
+            return f"CreateNode(type={self.object_type}, name='{self.name}', definition={self.definition})"
+        return f"CreateNode(type={self.object_type}, name='{self.name}')"
+
+
+class ColumnNode:
+    """AST Node representing column name, with optional data type and type parameters."""
+
+    def __init__(self, name, data_type, is_primary=False):
+        self.name = name
+        self.data_type = data_type
+        self.is_primary = is_primary
+
+    def __repr__(self):
+        return f"ColumnNode(name={self.name}, data_type={self.data_type}, is_primary={self.is_primary})"
+
+
+class DataTypeNode:
+    """AST Node representing a data type."""
+
+    def __init__(self, name, param=None):
+        self.name = name
+        self.param = param
+
+    def __repr__(self):
+        return f"DataTypeNode(name={self.name}, param={self.param})"

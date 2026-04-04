@@ -1,10 +1,17 @@
-# Grammar (Phase 2 - WHERE clause)
+# Grammar (Phase 3 - CREATE statement)
 #
-# SELECT_STATEMENT → SELECT COLUMN_LIST FROM TABLE WHERE EXPRESSION ORDER BY ORDER_LIST SEMICOLON
+# SELECT_STATEMENT → SELECT COLUMN_LIST FROM TABLE_NAME WHERE EXPRESSION ORDER BY ORDER_LIST SEMICOLON?
+# CREATE_STATEMENT → CREATE DATABASE IDENTIFIER SEMICOLON?
+#                  | CREATE SCHEMA IDENTIFIER SEMICOLON?
+#                  | CREATE TABLE TABLE_NAME LPAREN COLUMN_LIST RPAREN SEMICOLON?
 #
 # COLUMN_LIST → * | IDENTIFIER ( COMMA IDENTIFIER )*
+# COLUMN_DEF_LIST → COLUMN_DEF ( COMMA COLUMN_DEF )*
+# COLUMN_DEF → IDENTIFIER DATA_TYPE ( PRIMARY KEY )?
+# DATA_TYPE → TYPE_NAME ( TYPE_PARAM )?
+# TYPE_PARAM → LPAREN NUMBER RPAREN
 #
-# TABLE → IDENTIFIER
+# TABLE_NAME → IDENTIFIER
 #
 # EXPRESSION → TERM ( (OR) TERM )*
 #
@@ -19,7 +26,6 @@
 # VALUE → NUMBER | STRING
 #
 # ORDER_LIST → ORDER_ITEM ( COMMA ORDER_ITEM )*
-#
 # ORDER_ITEM → IDENTIFIER ( ASC | DESC )
 
 from sql.ast_nodes import (
@@ -29,6 +35,9 @@ from sql.ast_nodes import (
     LogicalNode,
     NotNode,
     OrderByNode,
+    CreateNode,
+    ColumnNode,
+    DataTypeNode,
 )
 from utils.exceptions import ParserError
 
@@ -43,6 +52,8 @@ class Parser:
         """Parse the token stream and return an AST"""
         if self.tokens.match("SELECT"):
             return self.parse_select()
+        elif self.tokens.match("CREATE"):
+            return self.parse_create()
 
     def parse_select(self):
         """
@@ -85,63 +96,200 @@ class Parser:
         ###
         # Optionally parse ORDER BY
         if self.tokens.match("ORDER"):
-            order_by = self.parse_order()
+            order_by = self.parse_orderby()
         else:
             order_by = None
 
         ###
         # Optionally parse SEMICOLON
-        if self.tokens.match("SEMICOLON"):
-            self.tokens.consume()
+        self.parse_semicolon()
 
         return SelectNode(columns, table, where_clause, order_by)
+
+    def parse_create(self):
+        """
+        Parse the CREATE statement.
+
+        CFG:\n
+        CREATE_STATEMENT → CREATE DATABASE IDENTIFIER SEMICOLON | CREATE SCHEMA IDENTIFIER SEMICOLON | CREATE TABLE TABLE_NAME LPAREN COLUMN_LIST RPAREN SEMICOLON
+        """
+
+        print("[Parser] Parsing CREATE")
+
+        # Next token must be CREATE, otherwise raise syntax error.
+        self.tokens.expect("CREATE")
+        # If token is CREATE, consume it and move forward.
+        self.tokens.consume()
+
+        ###
+        # Next token can either be DATABASE, SCHEMA or TABLE
+
+        # Next token must be DATABASE, otherwise raise syntax error.
+        if self.tokens.match("DATABASE"):
+
+            # If token is DATABASE, consume it and move forward.
+            self.tokens.consume()
+
+            # Next token must be IDENTIFIER. If it is, store it's value, consume it and move forward.
+            database_name = self.tokens.expect("IDENTIFIER").value
+            self.tokens.consume()
+
+            ###
+            # Optionally parse SEMICOLON
+            self.parse_semicolon()
+
+            return CreateNode("DATABASE", database_name)
+
+        # Next token must be SCHEMA, otherwise raise syntax error.
+        elif self.tokens.match("SCHEMA"):
+
+            # If token is SCHEMA, consume it and move forward.
+            self.tokens.consume()
+
+            # Next token must be SCHEMA. If it is, store it's value, consume it and move forward.
+            schema_name = self.tokens.expect("IDENTIFIER").value
+            self.tokens.consume()
+
+            ###
+            # Optionally parse SEMICOLON
+            self.parse_semicolon()
+
+            return CreateNode("SCHEMA", schema_name)
+
+        # Next token must be DATABASE, otherwise raise syntax error.
+        elif self.tokens.match("TABLE"):
+            self.tokens.consume()
+
+            table_name = self.tokens.expect("IDENTIFIER").value
+            self.tokens.consume()
+
+            self.tokens.expect("LPAREN")
+            self.tokens.consume()
+
+            columns = self.parse_column_def_list()
+
+            self.tokens.expect("RPAREN")
+            self.tokens.consume()
+
+            ###
+            # Optionally parse SEMICOLON
+            self.parse_semicolon()
+
+            return CreateNode("TABLE", table_name, columns)
+
+        else:
+            raise ParserError("Expected DATABASE, SCHEMA or TABLE")
 
     def parse_columns(self):
         """
         Parse the table column.
 
         CFG:
-        COLUMN_LIST → * | IDENTIFIER ( COMMA IDENTIFIER )*
+        COLUMN_LIST → * | IDENTIFIER (COMMA IDENTIFIER)*
         """
         print("[Parser] Parsing COLUMN_LIST")
-
-        columns = []
 
         if self.tokens.match("STAR"):
             token = AllColumnsNode()
             self.tokens.consume()
             return token
         else:
-            # Token must be an identifier, otherwise raise syntax error.
-            column_name = self.tokens.expect("IDENTIFIER").value
-
-            # First column is mandatory
-            columns.append(column_name)
-
-            # Consume the current identifier and
-            # advance to the next token.
-            self.tokens.consume()
-
-            while self.tokens.match("COMMA"):
-                # While the current token is COMMA,
-                # consume it and advance to the next IDENTIFIER
-                # consume the identifier and advance
-                # until there is no COMMA
-                self.tokens.consume()
-                column_name = self.tokens.expect("IDENTIFIER").value
-                self.tokens.consume()
-                columns.append(column_name)
+            columns = self.parse_column_def_list()
 
         return columns
+
+    def parse_column_def_list(self):
+        """
+        Parse column definitions list.
+
+        CFG:\n
+        COLUMN_DEF_LIST → COLUMN_DEF (COMMA COLUMN_DEF)*
+        """
+
+        columns = []
+
+        # First column is mandatory
+        columns.append(self.parse_column_def())
+
+        # Parse the next columns if separated by COMMAs.
+        while self.tokens.match("COMMA"):
+            # While the current token is COMMA,
+            # consume it and advance to the next COLUMN_DEF
+            # until there is no COMMA
+            self.tokens.consume()
+            columns.append(self.parse_column_def())
+
+        return columns
+
+    def parse_column_def(self):
+        """
+        Parse column definitions.
+
+        CFG:\n
+        COLUMN_DEF → IDENTIFIER DATA_TYPE (PRIMARY_KEY)?
+        """
+
+        # Token must be an identifier, otherwise raise syntax error.
+        column_name = self.tokens.expect("IDENTIFIER").value
+        self.tokens.consume()
+
+        data_type = self.parse_datatype()
+
+        is_primary = False
+        if self.tokens.match("PRIMARY"):
+            self.tokens.consume()
+
+            self.tokens.expect("KEY")
+            self.tokens.consume()
+
+            is_primary = True
+
+        return ColumnNode(column_name, data_type, is_primary)
+
+    def parse_datatype(self):
+        """
+        Parse DATATYPE.
+
+        CFG:\n
+        DATA_TYPE → IDENTIFIER ( TYPE_PARAM )?
+        """
+
+        data_type = self.tokens.expect("IDENTIFIER").value
+        self.tokens.consume()
+
+        type_param = None
+
+        if self.tokens.match("LPAREN"):
+            type_param = self.parse_typeparam()
+
+        return DataTypeNode(data_type, type_param)
+
+    def parse_typeparam(self):
+        """
+        Parse TYPE_PARAM.
+
+        CFG:\n
+        TYPE_PARAM → LPAREN NUMBER RPAREN
+        """
+
+        self.tokens.consume("LPAREN")
+
+        size = int(self.tokens.expect("NUMBER").value)
+        self.tokens.consume()
+
+        self.tokens.expect("RPAREN")
+        self.tokens.consume()
+
+        return size
 
     def parse_table(self):
         """
         Parse the table.
 
         CFG:\n
-        TABLE → IDENTIFIER
+        TABLE_NAME → IDENTIFIER
         """
-        print("[Parser] Parsing TABLE")
+        print("[Parser] Parsing TABLE_NAME")
 
         # Token must be an identifier, otherwise raise syntax error.
         token = self.tokens.expect("IDENTIFIER")
@@ -336,7 +484,7 @@ class Parser:
                 position=current.position,
             )
 
-    def parse_order(self):
+    def parse_orderby(self):
         """
         Parse ORDER BY clause.
 
@@ -392,3 +540,10 @@ class Parser:
             items.append((column_name, direction))
 
         return OrderByNode(items)
+
+    def parse_semicolon(self):
+        """
+        Parse the SEMICOLON (optional).
+        """
+        if self.tokens.match("SEMICOLON"):
+            self.tokens.consume()

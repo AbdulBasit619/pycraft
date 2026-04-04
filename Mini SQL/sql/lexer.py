@@ -22,6 +22,9 @@ class Lexer:
         "FROM",
         "WHERE",
         "INSERT",
+        "CREATE",
+        "TABLE",
+        "DATABASE",
         "INTO",
         "VALUES",
         "UPDATE",
@@ -34,6 +37,9 @@ class Lexer:
         "BY",
         "ASC",
         "DESC",
+        "SCHEMA",
+        "PRIMARY",
+        "KEY",
     }
 
     TOKEN_SPEC = [
