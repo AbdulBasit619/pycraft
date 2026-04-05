@@ -141,3 +141,16 @@ class UpdateNode:
         if self.where_clause:
             return f"UpdateNode(table={self.table}, assignments={self.assignments}, where_clause={self.where_clause})"
         return f"UpdateNode(table={self.table}, assignments={self.assignments})"
+
+
+class DeleteNode:
+    """AST Node representing DELETE query."""
+
+    def __init__(self, table, where_clause=None):
+        self.table = table
+        self.where_clause = where_clause
+
+    def __repr__(self):
+        if self.where_clause:
+            return f"DeleteNode(table={self.table}, where_clause={self.where_clause})"
+        return f"DeleteNode(table={self.table})"

@@ -1,16 +1,17 @@
-# Grammar (Phase 4 - minimal INSERT)
+# Grammar (Phase 5 - minimal DELETE)
 #
-# SELECT_STATEMENT → SELECT COLUMN_LIST FROM TABLE_NAME WHERE EXPRESSION ORDER BY ORDER_LIST SEMICOLON?
+# SELECT_STATEMENT → SELECT COLUMN_LIST FROM TABLE_NAME (WHERE EXPRESSION)? ORDER BY ORDER_LIST SEMICOLON?
 # CREATE_STATEMENT → CREATE DATABASE IDENTIFIER SEMICOLON?
 #                  | CREATE SCHEMA IDENTIFIER SEMICOLON?
 #                  | CREATE TABLE TABLE_NAME LPAREN COLUMN_LIST RPAREN SEMICOLON?
-# INSERT_STATEMENT → INSERT INTO TABLE_NAME ( COLUMN_NAMES )? VALUES VALUE_TUPLE (COMMA VALUE_TUPLE)* SEMICOLON?
-# UPDATE_STATEMENT → UPDATE TABLE_NAME SET ASSIGNMENT_LIST WHERE EXPRESSION SEMICOLON?
+# INSERT_STATEMENT → INSERT INTO TABLE_NAME (COLUMN_NAMES)? VALUES VALUE_TUPLE ( COMMA VALUE_TUPLE )* SEMICOLON?
+# UPDATE_STATEMENT → UPDATE TABLE_NAME SET ASSIGNMENT_LIST (WHERE EXPRESSION)? SEMICOLON?
+# DELETE_STATEMENT → DELETE FROM TABLE_NAME (WHERE EXPRESSION)? SEMICOLON?
 #
 # COLUMN_LIST → * | IDENTIFIER ( COMMA IDENTIFIER )*
 # COLUMN_DEF_LIST → COLUMN_DEF ( COMMA COLUMN_DEF )*
-# COLUMN_DEF → IDENTIFIER DATA_TYPE ( PRIMARY KEY )?
-# DATA_TYPE → TYPE_NAME ( TYPE_PARAM )?
+# COLUMN_DEF → IDENTIFIER (DATA_TYPE)? (PRIMARY KEY)?
+# DATA_TYPE → TYPE_NAME (TYPE_PARAM)?
 # TYPE_PARAM → LPAREN NUMBER RPAREN
 #
 # ASSIGNMENT_LIST → ASSIGNMENT ( COMMA ASSIGNMENT )*
@@ -47,6 +48,7 @@ from sql.ast_nodes import (
     DataTypeNode,
     InsertNode,
     UpdateNode,
+    DeleteNode,
 )
 from utils.exceptions import ParserError
 
@@ -67,13 +69,15 @@ class Parser:
             return self.parse_insert()
         elif self.tokens.match("UPDATE"):
             return self.parse_update()
+        elif self.tokens.match("DELETE"):
+            return self.parse_delete()
 
     def parse_select(self):
         """
         Parse the SELECT statement.
 
         CFG:\n
-        SELECT_STATEMENT → SELECT COLUMN_LIST FROM TABLE WHERE EXPRESSION ORDER BY ORDER_LIST SEMICOLON
+        SELECT_STATEMENT → SELECT COLUMN_LIST FROM TABLE (WHERE EXPRESSION)? ORDER BY ORDER_LIST SEMICOLON
         """
         print("[Parser] Parsing SELECT statement")
 
@@ -121,7 +125,7 @@ class Parser:
 
     def parse_create(self):
         """
-        Parse the CREATE statement.
+        Parse the CREATE query.
 
         CFG:\n
         CREATE_STATEMENT → CREATE DATABASE IDENTIFIER SEMICOLON | CREATE SCHEMA IDENTIFIER SEMICOLON | CREATE TABLE TABLE_NAME LPAREN COLUMN_LIST RPAREN SEMICOLON
@@ -194,7 +198,7 @@ class Parser:
             raise ParserError("Expected DATABASE, SCHEMA or TABLE")
 
     def parse_insert(self):
-        """Parse the INSERT statement with multiple rows.
+        """Parse the INSERT query.
 
         CFG:\n
         INSERT_STATEMENT → INSERT INTO TABLE_NAME ( COLUMN_NAMES )? VALUES VALUE_TUPLE (COMMA VALUE_TUPLE)* SEMICOLON?
@@ -236,10 +240,10 @@ class Parser:
 
     def parse_update(self):
         """
-        Parse UPDATE statement.
+        Parse UPDATE query.
 
         CFG:\n
-        UPDATE_STATEMENT → UPDATE TABLE_NAME SET ASSIGNMENT_LIST WHERE EXPRESSION SEMICOLON?
+        UPDATE_STATEMENT → UPDATE TABLE_NAME SET ASSIGNMENT_LIST (WHERE EXPRESSION)? SEMICOLON?
         """
 
         print("[Parser] Parsing UPDATE")
@@ -262,6 +266,33 @@ class Parser:
             self.parse_semicolon()
 
         return UpdateNode(table_name, assignment_list, where_clause)
+
+    def parse_delete(self):
+        """
+        Parse DELETE query.
+
+        CFG:\n
+        DELETE_STATEMENT → DELETE FROM TABLE_NAME (WHERE EXPRESSION)? SEMICOLON?
+        """
+
+        print("[Parser] Parsing DELETE query.")
+
+        self.tokens.expect("DELETE")
+        self.tokens.consume()
+
+        self.tokens.expect("FROM")
+        self.tokens.consume()
+
+        table_name = self.parse_table()
+
+        where_clause = None
+        if self.tokens.match("WHERE"):
+            where_clause = self.parse_where()
+
+        if self.tokens.match("SEMICOLON"):
+            self.parse_semicolon()
+
+        return DeleteNode(table_name, where_clause)
 
     def parse_columns(self):
         """
