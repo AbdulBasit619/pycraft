@@ -5,12 +5,16 @@
 #                  | CREATE SCHEMA IDENTIFIER SEMICOLON?
 #                  | CREATE TABLE TABLE_NAME LPAREN COLUMN_LIST RPAREN SEMICOLON?
 # INSERT_STATEMENT → INSERT INTO TABLE_NAME ( COLUMN_NAMES )? VALUES VALUE_TUPLE (COMMA VALUE_TUPLE)* SEMICOLON?
+# UPDATE_STATEMENT → UPDATE TABLE_NAME SET ASSIGNMENT_LIST WHERE EXPRESSION SEMICOLON?
 #
 # COLUMN_LIST → * | IDENTIFIER ( COMMA IDENTIFIER )*
 # COLUMN_DEF_LIST → COLUMN_DEF ( COMMA COLUMN_DEF )*
 # COLUMN_DEF → IDENTIFIER DATA_TYPE ( PRIMARY KEY )?
 # DATA_TYPE → TYPE_NAME ( TYPE_PARAM )?
 # TYPE_PARAM → LPAREN NUMBER RPAREN
+#
+# ASSIGNMENT_LIST → ASSIGNMENT ( COMMA ASSIGNMENT )*
+# ASSIGNMENT → IDENTIFIER OPERATOR VALUE
 #
 # TABLE_NAME → IDENTIFIER
 #
@@ -42,6 +46,7 @@ from sql.ast_nodes import (
     ColumnNode,
     DataTypeNode,
     InsertNode,
+    UpdateNode,
 )
 from utils.exceptions import ParserError
 
@@ -60,6 +65,8 @@ class Parser:
             return self.parse_create()
         elif self.tokens.match("INSERT"):
             return self.parse_insert()
+        elif self.tokens.match("UPDATE"):
+            return self.parse_update()
 
     def parse_select(self):
         """
@@ -226,6 +233,35 @@ class Parser:
         self.parse_semicolon()
 
         return InsertNode(table_name, rows, columns)
+
+    def parse_update(self):
+        """
+        Parse UPDATE statement.
+
+        CFG:\n
+        UPDATE_STATEMENT → UPDATE TABLE_NAME SET ASSIGNMENT_LIST WHERE EXPRESSION SEMICOLON?
+        """
+
+        print("[Parser] Parsing UPDATE")
+
+        self.tokens.expect("UPDATE")
+        self.tokens.consume()
+
+        table_name = self.parse_table()
+
+        self.tokens.expect("SET")
+        self.tokens.consume()
+
+        assignment_list = self.parse_assignmentlist()
+
+        where_clause = None
+        if self.tokens.match("WHERE"):
+            where_clause = self.parse_where()
+
+        if self.tokens.match("SEMICOLON"):
+            self.parse_semicolon()
+
+        return UpdateNode(table_name, assignment_list, where_clause)
 
     def parse_columns(self):
         """
@@ -601,6 +637,49 @@ class Parser:
                 f"Expected NUMBER or STRING, but found {current.type}",
                 position=current.position,
             )
+
+    def parse_assignmentlist(self):
+        """
+        Parse ASSIGNMENT_LIST.
+
+        CFG:\n
+        ASSIGNMENT_LIST → ASSIGNMENT ( COMMA ASSIGNMENT )*
+        """
+
+        print("[Parser] Parsing ASSIGNMENT_LIST")
+
+        assignments = []
+
+        assignments.append(self.parse_assignment())
+
+        while self.tokens.match("COMMA"):
+            self.tokens.consume()
+            assignments.append(self.parse_assignment())
+
+        return assignments
+
+    def parse_assignment(self):
+        """
+        Parse ASSIGNMENT.
+
+        CFG:\n
+        ASSIGNMENT → IDENTIFIER OPERATOR VALUE
+        """
+
+        print("[Parser] Parsing ASSIGNMENT")
+
+        column = self.tokens.expect("IDENTIFIER").value
+        self.tokens.consume()
+
+        operator = self.tokens.expect("OPERATOR").value
+
+        if operator != "=":
+            pass
+        self.tokens.consume()
+
+        value = self.parse_value()
+
+        return (column, value)
 
     def parse_orderby(self):
         """

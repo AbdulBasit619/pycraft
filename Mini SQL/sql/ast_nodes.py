@@ -127,3 +127,17 @@ class InsertNode:
         return (
             f"InsertNode(table_name={self.table_name}, value_list={self.value_tuples})"
         )
+
+
+class UpdateNode:
+    """AST Node representing UPDATE query."""
+
+    def __init__(self, table, assignments, where_clause=None):
+        self.table = table
+        self.assignments = assignments
+        self.where_clause = where_clause
+
+    def __repr__(self):
+        if self.where_clause:
+            return f"UpdateNode(table={self.table}, assignments={self.assignments}, where_clause={self.where_clause})"
+        return f"UpdateNode(table={self.table}, assignments={self.assignments})"
