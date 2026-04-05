@@ -4,6 +4,7 @@
 # CREATE_STATEMENT → CREATE DATABASE IDENTIFIER SEMICOLON?
 #                  | CREATE SCHEMA IDENTIFIER SEMICOLON?
 #                  | CREATE TABLE TABLE_NAME LPAREN COLUMN_LIST RPAREN SEMICOLON?
+# INSERT_STATEMENT → INSERT INTO TABLE_NAME ( COLUMN_NAMES )? VALUES VALUE_TUPLE (COMMA VALUE_TUPLE)* SEMICOLON?
 #
 # COLUMN_LIST → * | IDENTIFIER ( COMMA IDENTIFIER )*
 # COLUMN_DEF_LIST → COLUMN_DEF ( COMMA COLUMN_DEF )*
@@ -23,6 +24,8 @@
 #
 # CONDITION → IDENTIFIER OPERATOR VALUE
 #
+# VALUE_TUPLE → LPAREN VALUE_LIST RPAREN
+# VALUE_LIST → VALUE (COMMA VALUE)*
 # VALUE → NUMBER | STRING
 #
 # ORDER_LIST → ORDER_ITEM ( COMMA ORDER_ITEM )*
@@ -38,6 +41,7 @@ from sql.ast_nodes import (
     CreateNode,
     ColumnNode,
     DataTypeNode,
+    InsertNode,
 )
 from utils.exceptions import ParserError
 
@@ -54,6 +58,8 @@ class Parser:
             return self.parse_select()
         elif self.tokens.match("CREATE"):
             return self.parse_create()
+        elif self.tokens.match("INSERT"):
+            return self.parse_insert()
 
     def parse_select(self):
         """
@@ -180,6 +186,47 @@ class Parser:
         else:
             raise ParserError("Expected DATABASE, SCHEMA or TABLE")
 
+    def parse_insert(self):
+        """Parse the INSERT statement with multiple rows.
+
+        CFG:\n
+        INSERT_STATEMENT → INSERT INTO TABLE_NAME ( COLUMN_NAMES )? VALUES VALUE_TUPLE (COMMA VALUE_TUPLE)* SEMICOLON?
+        """
+
+        print("[Parser] Parsing INSERT query.")
+
+        self.tokens.expect("INSERT")
+        self.tokens.consume()
+
+        self.tokens.expect("INTO")
+        self.tokens.consume()
+
+        table_name = self.parse_table()
+
+        columns = None
+        if self.tokens.match("LPAREN"):
+            self.tokens.consume()
+            columns = self.parse_column_names()
+
+            self.tokens.expect("RPAREN")
+            self.tokens.consume()
+
+        self.tokens.expect("VALUES")
+        self.tokens.consume()
+
+        rows = []
+
+        rows.append(self.parse_valuetuple())
+
+        # Additional tuples.
+        while self.tokens.match("COMMA"):
+            self.tokens.consume()
+            rows.append(self.parse_valuetuple())
+
+        self.parse_semicolon()
+
+        return InsertNode(table_name, rows, columns)
+
     def parse_columns(self):
         """
         Parse the table column.
@@ -193,21 +240,31 @@ class Parser:
             self.tokens.consume()
             return AllColumnsNode()
 
+        columns = self.parse_column_names()
+        return columns
+
+    def parse_column_names(self):
+        """
+        Parse column names.
+
+        CFG:\n
+        COLUMN_NAMES → IDENTIFIER (COMMA IDENTIFIER)*
+        """
+
+        print("[Parser] Parsing COLUMN_NAMES")
         columns = []
 
-        # First column is mandatory
         column_name = self.tokens.expect("IDENTIFIER").value
         self.tokens.consume()
         columns.append(column_name)
 
-        # Remaining columns
         while self.tokens.match("COMMA"):
             self.tokens.consume()
             column_name = self.tokens.expect("IDENTIFIER").value
             self.tokens.consume()
             columns.append(column_name)
 
-            return columns
+        return columns
 
     def parse_column_def_list(self):
         """
@@ -463,6 +520,46 @@ class Parser:
         value = self.parse_value()
 
         return ConditionNode(column_name, operator, value)
+
+    def parse_valuetuple(self):
+        """
+        Parse VALUE_TUPLE.
+
+        CFG:\n
+        VALUE_TUPLE → LPAREN VALUE_LIST RPAREN
+        """
+
+        print("[Parser] Parsing VALUE_TUPLE")
+
+        self.tokens.expect("LPAREN")
+        self.tokens.consume()
+
+        row = self.parse_valuelist()
+
+        self.tokens.expect("RPAREN")
+        self.tokens.consume()
+
+        return row
+
+    def parse_valuelist(self):
+        """
+        Parse value list.
+
+        CFG:\n
+        VALUE_LIST → VALUE (COMMA VALUE)*
+        """
+
+        print("[Parser] Parsing VALUE_LIST")
+
+        value_list = []
+
+        value_list.append(self.parse_value())
+
+        while self.tokens.match("COMMA"):
+            self.tokens.consume()
+            value_list.append(self.parse_value())
+
+        return tuple(value_list)
 
     def parse_value(self):
         """

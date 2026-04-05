@@ -106,3 +106,24 @@ class DataTypeNode:
 
     def __repr__(self):
         return f"DataTypeNode(name={self.name}, param={self.param})"
+
+
+class InsertNode:
+    """AST Node representing INSERT query."""
+
+    def __init__(
+        self,
+        table_name,
+        value_tuples,
+        columns=None,
+    ):
+        self.table_name = table_name
+        self.columns = columns
+        self.value_tuples = value_tuples
+
+    def __repr__(self):
+        if self.columns:
+            return f"InsertNode(table_name={self.table_name}, value_tuples={self.value_tuples}, columns={self.columns})"
+        return (
+            f"InsertNode(table_name={self.table_name}, value_list={self.value_tuples})"
+        )
