@@ -166,3 +166,14 @@ class AlterNode:
 
     def __repr__(self):
         return f"AlterNode(table={self.table}, action={self.action}, payload={self.payload})"
+
+
+class DropNode:
+    """AST Node representing DROP query."""
+
+    def __init__(self, object_type, name):
+        self.object_type = object_type
+        self.name = name
+
+    def __repr__(self):
+        return f"DropNode(object_type={self.object_type}, name={self.name})"

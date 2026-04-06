@@ -8,6 +8,9 @@
 # UPDATE_STATEMENT → UPDATE TABLE_NAME SET ASSIGNMENT_LIST (WHERE EXPRESSION)? SEMICOLON?
 # DELETE_STATEMENT → DELETE FROM TABLE_NAME (WHERE EXPRESSION)? SEMICOLON?
 # ALTER_STATEMENT → ALTER TABLE TABLE_NAME ALTER_ACTION SEMICOLON?
+# DROP_STATEMENT → DROP DATABASE IDENTIFIER SEMICOLON?
+#                | DROP SCHEMA IDENTIFIER SEMICOLON?
+#                | DROP TABLE TABLE_NAME SEMICOLON?
 #
 # COLUMN_LIST → * | IDENTIFIER ( COMMA IDENTIFIER )*
 # COLUMN_DEF_LIST → COLUMN_DEF ( COMMA COLUMN_DEF )*
@@ -53,6 +56,7 @@ from sql.ast_nodes import (
     UpdateNode,
     DeleteNode,
     AlterNode,
+    DropNode,
 )
 from utils.exceptions import ParserError
 
@@ -77,6 +81,8 @@ class Parser:
             return self.parse_delete()
         elif self.tokens.match("ALTER"):
             return self.parse_alter()
+        elif self.tokens.match("DROP"):
+            return self.parse_drop()
 
     def parse_select(self):
         """
@@ -319,7 +325,7 @@ class Parser:
 
         table_name = self.parse_table()
 
-        action, payload = None, None
+        action = payload = None
 
         if self.tokens.match("ADD"):
             self.tokens.consume()
@@ -354,6 +360,55 @@ class Parser:
             self.parse_semicolon()
 
         return AlterNode(table_name, action, payload)
+
+    def parse_drop(self):
+        """
+        Parsing DROP query.
+
+        CFG:\n
+        DROP_STATEMENT → DROP DATABASE IDENTIFIER SEMICOLON?
+                       | DROP SCHEMA IDENTIFIER SEMICOLON?
+                       | DROP TABLE TABLE_NAME SEMICOLON?
+        """
+
+        print("[Parser] Parsing DROP query.")
+
+        self.tokens.expect("DROP")
+        self.tokens.consume()
+
+        object_type = object_name = None
+
+        if self.tokens.match("DATABASE"):
+            self.tokens.consume()
+
+            object_type = "DATABASE"
+            object_name = self.tokens.expect("IDENTIFIER").value
+
+            if self.tokens.match("SEMICOLON"):
+                self.parse_semicolon()
+
+        elif self.tokens.match("SCHEMA"):
+            self.tokens.consume()
+
+            object_type = "SCHEMA"
+            object_name = self.tokens.expect("IDENTIFIER").value
+
+            if self.tokens.match("SEMICOLON"):
+                self.parse_semicolon()
+
+        elif self.tokens.match("TABLE"):
+            self.tokens.consume()
+
+            object_type = "TABLE"
+            object_name = self.tokens.expect("IDENTIFIER").value
+
+            if self.tokens.match("SEMICOLON"):
+                self.parse_semicolon()
+
+        else:
+            pass
+
+        return DropNode(object_type, object_name)
 
     def parse_columns(self):
         """

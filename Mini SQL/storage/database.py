@@ -6,9 +6,10 @@ from .table import Table
 class Database:
     """A class to create database, store and manage tables."""
 
-    def __init__(self):
+    def __init__(self, name):
         """Initialize a tables dictionary."""
         self.tables = {}
+        self.name = name
 
     def create_table(self, name, columns):
         """Add table to tables dictionary."""
@@ -21,3 +22,6 @@ class Database:
     def get_table(self, name):
         """Return a table from tables dictionary."""
         return self.tables[name]
+
+    def __repr__(self):
+        return self.name

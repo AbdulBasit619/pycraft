@@ -3,7 +3,7 @@ from engines.engine import Engine
 
 
 def run_sql():
-    db = Database()
+    db = Database("Users")
     db.create_table("users", ["id", "name", "age"])
     db.get_table("users").insert([1, "Alice", 25])
     db.get_table("users").insert([2, "Bob", 31])
@@ -18,8 +18,11 @@ def run_sql():
     # )
     # eng.execute("UPDATE users SET age = 30, name = 'Peter' WHERE age >= 20;")
     # eng.execute("DELETE FROM users WHERE name = 'Bob' OR (age < 20 AND NOT id = 3);")
-    eng.execute("ALTER TABLE users ADD COLUMN profession;")
-    eng.execute("ALTER TABLE users DROP COLUMN profession;")
+    # eng.execute("ALTER TABLE users ADD COLUMN profession;")
+    # eng.execute("ALTER TABLE users DROP COLUMN profession;")
+    eng.execute("DROP DATABASE Users;")
+    eng.execute("DROP SCHEMA user_schema;")
+    eng.execute("DROP TABLE users;")
 
 
 if __name__ == "__main__":
