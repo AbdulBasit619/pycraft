@@ -4,18 +4,21 @@
 # CREATE_STATEMENT → CREATE DATABASE IDENTIFIER SEMICOLON?
 #                  | CREATE SCHEMA IDENTIFIER SEMICOLON?
 #                  | CREATE TABLE TABLE_NAME LPAREN COLUMN_LIST RPAREN SEMICOLON?
-# INSERT_STATEMENT → INSERT INTO TABLE_NAME (COLUMN_NAMES)? VALUES VALUE_TUPLE ( COMMA VALUE_TUPLE )* SEMICOLON?
+# INSERT_STATEMENT → INSERT INTO TABLE_NAME COLUMN_NAMES? VALUES VALUE_TUPLE ( COMMA VALUE_TUPLE )* SEMICOLON?
 # UPDATE_STATEMENT → UPDATE TABLE_NAME SET ASSIGNMENT_LIST (WHERE EXPRESSION)? SEMICOLON?
 # DELETE_STATEMENT → DELETE FROM TABLE_NAME (WHERE EXPRESSION)? SEMICOLON?
+# ALTER_STATEMENT → ALTER TABLE TABLE_NAME ALTER_ACTION SEMICOLON?
 #
 # COLUMN_LIST → * | IDENTIFIER ( COMMA IDENTIFIER )*
 # COLUMN_DEF_LIST → COLUMN_DEF ( COMMA COLUMN_DEF )*
-# COLUMN_DEF → IDENTIFIER (DATA_TYPE)? (PRIMARY KEY)?
-# DATA_TYPE → TYPE_NAME (TYPE_PARAM)?
+# COLUMN_DEF → IDENTIFIER DATA_TYPE? (PRIMARY KEY)?
+# DATA_TYPE → TYPE_NAME TYPE_PARAM?
 # TYPE_PARAM → LPAREN NUMBER RPAREN
 #
 # ASSIGNMENT_LIST → ASSIGNMENT ( COMMA ASSIGNMENT )*
 # ASSIGNMENT → IDENTIFIER OPERATOR VALUE
+#
+# ALTER_ACTION → ADD COLUMN COLUMN_DEF | DROP COLUMN IDENTIFIER
 #
 # TABLE_NAME → IDENTIFIER
 #
@@ -49,6 +52,7 @@ from sql.ast_nodes import (
     InsertNode,
     UpdateNode,
     DeleteNode,
+    AlterNode,
 )
 from utils.exceptions import ParserError
 
@@ -71,6 +75,8 @@ class Parser:
             return self.parse_update()
         elif self.tokens.match("DELETE"):
             return self.parse_delete()
+        elif self.tokens.match("ALTER"):
+            return self.parse_alter()
 
     def parse_select(self):
         """
@@ -294,6 +300,61 @@ class Parser:
 
         return DeleteNode(table_name, where_clause)
 
+    def parse_alter(self):
+        """
+        Parse ALTER query.
+
+        CFG:\n
+        ALTER_STATEMENT → ALTER TABLE TABLE_NAME ALTER_ACTION SEMICOLON?
+        ALTER_ACTION → ADD COLUMN COLUMN_DEF | DROP COLUMN IDENTIFIER
+        """
+
+        print("[Parser] Parsing ALTER")
+
+        self.tokens.expect("ALTER")
+        self.tokens.consume()
+
+        self.tokens.expect("TABLE")
+        self.tokens.consume()
+
+        table_name = self.parse_table()
+
+        action, payload = None, None
+
+        if self.tokens.match("ADD"):
+            self.tokens.consume()
+
+            self.tokens.expect("COLUMN")
+            self.tokens.consume()
+
+            column_def = self.parse_column_def()
+
+            action = "ADD"
+            payload = column_def
+
+        elif self.tokens.match("DROP"):
+            self.tokens.consume()
+
+            self.tokens.expect("COLUMN")
+            self.tokens.consume()
+
+            column_name = self.tokens.expect("IDENTIFIER").value
+
+            action = "DROP"
+            payload = column_name
+
+        else:
+            current = self.tokens.current()
+            raise ParserError(
+                f"Expected ADD or DROP, but found {current.value}",
+                position=current.position,
+            )
+
+        if self.tokens.match("SEMICOLON"):
+            self.parse_semicolon()
+
+        return AlterNode(table_name, action, payload)
+
     def parse_columns(self):
         """
         Parse the table column.
@@ -372,7 +433,11 @@ class Parser:
         column_name = self.tokens.expect("IDENTIFIER").value
         self.tokens.consume()
 
-        data_type = self.parse_datatype()
+        data_type = None
+        if self.tokens.match(
+            "IDENTIFIER"
+        ) and self.tokens.current().value.upper() not in ("PRIMARY",):
+            data_type = self.parse_datatype()
 
         is_primary = False
         if self.tokens.match("PRIMARY"):

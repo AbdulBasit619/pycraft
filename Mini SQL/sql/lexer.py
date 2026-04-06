@@ -40,6 +40,10 @@ class Lexer:
         "SCHEMA",
         "PRIMARY",
         "KEY",
+        "ALTER",
+        "ADD",
+        "DROP",
+        "COLUMN",
     }
 
     TOKEN_SPEC = [

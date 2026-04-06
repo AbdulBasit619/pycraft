@@ -154,3 +154,15 @@ class DeleteNode:
         if self.where_clause:
             return f"DeleteNode(table={self.table}, where_clause={self.where_clause})"
         return f"DeleteNode(table={self.table})"
+
+
+class AlterNode:
+    """AST Node representing ALTER query."""
+
+    def __init__(self, table, action, payload):
+        self.table = table
+        self.action = action
+        self.payload = payload
+
+    def __repr__(self):
+        return f"AlterNode(table={self.table}, action={self.action}, payload={self.payload})"

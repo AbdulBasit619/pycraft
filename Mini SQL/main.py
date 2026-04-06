@@ -17,7 +17,9 @@ def run_sql():
     #     "INSERT INTO users (id, name, age) VALUES (1, 'Alice', 25), (2, 'Bob', 31);"
     # )
     # eng.execute("UPDATE users SET age = 30, name = 'Peter' WHERE age >= 20;")
-    eng.execute("DELETE FROM users WHERE name = 'Bob' OR (age < 20 AND NOT id = 3);")
+    # eng.execute("DELETE FROM users WHERE name = 'Bob' OR (age < 20 AND NOT id = 3);")
+    eng.execute("ALTER TABLE users ADD COLUMN profession;")
+    eng.execute("ALTER TABLE users DROP COLUMN profession;")
 
 
 if __name__ == "__main__":
