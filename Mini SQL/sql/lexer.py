@@ -44,6 +44,11 @@ class Lexer:
         "ADD",
         "DROP",
         "COLUMN",
+        "JOIN",
+        "INNER",
+        "LEFT",
+        "RIGHT",
+        "ON",
     }
 
     TOKEN_SPEC = [

@@ -5,14 +5,15 @@
 class SelectNode:
     """AST Node representing SELECT query."""
 
-    def __init__(self, columns, table, where_clause=None, order_by=None):
+    def __init__(self, columns, table, joins, where_clause=None, order_by=None):
         self.columns = columns
         self.table = table
+        self.joins = joins
         self.where_clause = where_clause
         self.order_by = order_by
 
     def __repr__(self):
-        return f"SelectNode(columns={self.columns}, table='{self.table}', where_clause={self.where_clause}, order_by={self.order_by})"
+        return f"SelectNode(columns={self.columns}, table='{self.table}', joins={self.joins}, where_clause={self.where_clause}, order_by={self.order_by})"
 
 
 class AllColumnsNode:
@@ -177,3 +178,28 @@ class DropNode:
 
     def __repr__(self):
         return f"DropNode(object_type={self.object_type}, name={self.name})"
+
+
+class JoinNode:
+    """AST Node representing JOIN clause."""
+
+    def __init__(self, join_type, table, condition):
+        self.join_type = join_type
+        self.table = table
+        self.condition = condition
+
+    def __repr__(self):
+        return f"JoinNode(join_type={self.join_type}, table={self.table}, condition={self.condition})"
+
+
+class ColumnRefNode:
+    """AST Node representing COLUMN_REF."""
+
+    def __init__(self, left, right=None):
+        self.left = left
+        self.right = right
+
+    def __repr__(self):
+        if self.right:
+            return f"ColumnRefNode(left={self.left}, right={self.right})"
+        return f"ColumnRefNode(identifier={self.left})"

@@ -20,9 +20,12 @@ def run_sql():
     # eng.execute("DELETE FROM users WHERE name = 'Bob' OR (age < 20 AND NOT id = 3);")
     # eng.execute("ALTER TABLE users ADD COLUMN profession;")
     # eng.execute("ALTER TABLE users DROP COLUMN profession;")
-    eng.execute("DROP DATABASE Users;")
-    eng.execute("DROP SCHEMA user_schema;")
-    eng.execute("DROP TABLE users;")
+    # eng.execute("DROP DATABASE Users;")
+    # eng.execute("DROP SCHEMA user_schema;")
+    # eng.execute("DROP TABLE users;")
+    eng.execute(
+        "SELECT * FROM users u JOIN orders o ON u.id = o.user_id LEFT JOIN payments p ON o.id = p.order_id;"
+    )
 
 
 if __name__ == "__main__":

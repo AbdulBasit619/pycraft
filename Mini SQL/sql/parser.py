@@ -1,16 +1,16 @@
-# Grammar (Phase 5 - minimal DELETE)
+# Grammar (Phase 6 - JOIN)
 #
-# SELECT_STATEMENT → SELECT COLUMN_LIST FROM TABLE_NAME (WHERE EXPRESSION)? ORDER BY ORDER_LIST SEMICOLON?
+# SELECT_STATEMENT → SELECT COLUMN_LIST FROM TABLE_REF JOIN_CLAUSE* (WHERE EXPRESSION)? ORDER BY ORDER_LIST SEMICOLON?
 # CREATE_STATEMENT → CREATE DATABASE IDENTIFIER SEMICOLON?
 #                  | CREATE SCHEMA IDENTIFIER SEMICOLON?
-#                  | CREATE TABLE TABLE_NAME LPAREN COLUMN_LIST RPAREN SEMICOLON?
-# INSERT_STATEMENT → INSERT INTO TABLE_NAME COLUMN_NAMES? VALUES VALUE_TUPLE ( COMMA VALUE_TUPLE )* SEMICOLON?
-# UPDATE_STATEMENT → UPDATE TABLE_NAME SET ASSIGNMENT_LIST (WHERE EXPRESSION)? SEMICOLON?
-# DELETE_STATEMENT → DELETE FROM TABLE_NAME (WHERE EXPRESSION)? SEMICOLON?
-# ALTER_STATEMENT → ALTER TABLE TABLE_NAME ALTER_ACTION SEMICOLON?
+#                  | CREATE TABLE TABLE_REF LPAREN COLUMN_LIST RPAREN SEMICOLON?
+# INSERT_STATEMENT → INSERT INTO TABLE_REF COLUMN_NAMES? VALUES VALUE_TUPLE ( COMMA VALUE_TUPLE )* SEMICOLON?
+# UPDATE_STATEMENT → UPDATE TABLE_REF SET ASSIGNMENT_LIST (WHERE EXPRESSION)? SEMICOLON?
+# DELETE_STATEMENT → DELETE FROM TABLE_REF (WHERE EXPRESSION)? SEMICOLON?
+# ALTER_STATEMENT → ALTER TABLE TABLE_REF ALTER_ACTION SEMICOLON?
 # DROP_STATEMENT → DROP DATABASE IDENTIFIER SEMICOLON?
 #                | DROP SCHEMA IDENTIFIER SEMICOLON?
-#                | DROP TABLE TABLE_NAME SEMICOLON?
+#                | DROP TABLE TABLE_REF SEMICOLON?
 #
 # COLUMN_LIST → * | IDENTIFIER ( COMMA IDENTIFIER )*
 # COLUMN_DEF_LIST → COLUMN_DEF ( COMMA COLUMN_DEF )*
@@ -23,7 +23,11 @@
 #
 # ALTER_ACTION → ADD COLUMN COLUMN_DEF | DROP COLUMN IDENTIFIER
 #
-# TABLE_NAME → IDENTIFIER
+# JOIN_CLAUSE → (INNER)? JOIN TABLE_REF ON CONDITION
+#             | LEFT JOIN TABLE_REF ON CONDITION
+#             | RIGHT JOIN TABLE_REF ON CONDITION
+#
+# TABLE_REF → IDENTIFIER (IDENTIFIER)?
 #
 # EXPRESSION → TERM ( (OR) TERM )*
 #
@@ -57,6 +61,7 @@ from sql.ast_nodes import (
     DeleteNode,
     AlterNode,
     DropNode,
+    JoinNode,
 )
 from utils.exceptions import ParserError
 
@@ -89,7 +94,7 @@ class Parser:
         Parse the SELECT statement.
 
         CFG:\n
-        SELECT_STATEMENT → SELECT COLUMN_LIST FROM TABLE (WHERE EXPRESSION)? ORDER BY ORDER_LIST SEMICOLON
+        SELECT_STATEMENT → SELECT COLUMN_LIST FROM TABLE JOIN_CLAUSE* (WHERE EXPRESSION)? ORDER BY ORDER_LIST SEMICOLON
         """
         print("[Parser] Parsing SELECT statement")
 
@@ -113,7 +118,18 @@ class Parser:
 
         ###
         # Recursively Descent to parsing table.
-        table = self.parse_table()
+        table = self.parse_table_ref()
+
+        ###
+        # Optionally parse JOIN clause.
+        joins = []
+        while (
+            self.tokens.match("JOIN")
+            or self.tokens.match("INNER")
+            or self.tokens.match("LEFT")
+            or self.tokens.match("RIGHT")
+        ):
+            joins.append(self.parse_join())
 
         ###
         # Optionally parse WHERE clause
@@ -133,7 +149,7 @@ class Parser:
         # Optionally parse SEMICOLON
         self.parse_semicolon()
 
-        return SelectNode(columns, table, where_clause, order_by)
+        return SelectNode(columns, table, joins, where_clause, order_by)
 
     def parse_create(self):
         """
@@ -224,7 +240,7 @@ class Parser:
         self.tokens.expect("INTO")
         self.tokens.consume()
 
-        table_name = self.parse_table()
+        table_name = self.parse_table_ref()
 
         columns = None
         if self.tokens.match("LPAREN"):
@@ -263,7 +279,7 @@ class Parser:
         self.tokens.expect("UPDATE")
         self.tokens.consume()
 
-        table_name = self.parse_table()
+        table_name = self.parse_table_ref()
 
         self.tokens.expect("SET")
         self.tokens.consume()
@@ -295,7 +311,7 @@ class Parser:
         self.tokens.expect("FROM")
         self.tokens.consume()
 
-        table_name = self.parse_table()
+        table_name = self.parse_table_ref()
 
         where_clause = None
         if self.tokens.match("WHERE"):
@@ -323,7 +339,7 @@ class Parser:
         self.tokens.expect("TABLE")
         self.tokens.consume()
 
-        table_name = self.parse_table()
+        table_name = self.parse_table_ref()
 
         action = payload = None
 
@@ -545,23 +561,27 @@ class Parser:
 
         return size
 
-    def parse_table(self):
+    def parse_table_ref(self):
         """
-        Parse the table.
+        Parse TABLE_REF.
 
         CFG:\n
-        TABLE_NAME → IDENTIFIER
+        TABLE_REF → IDENTIFIER (IDENTIFIER)?
         """
-        print("[Parser] Parsing TABLE_NAME")
+        print("[Parser] Parsing TABLE_REF")
 
         # Token must be an identifier, otherwise raise syntax error.
-        token = self.tokens.expect("IDENTIFIER")
-        table_name = token.value
+        table_name = self.tokens.expect("IDENTIFIER").value
 
         # If token is an identifier, consume it and move forward.
         self.tokens.consume()
 
-        return table_name
+        alias = None
+
+        if self.tokens.match("IDENTIFIER"):
+            alias = self.tokens.consume().value
+
+        return (table_name, alias)
 
     def parse_where(self):
         """
@@ -682,31 +702,56 @@ class Parser:
         Parse the conditions after WHERE statement.
 
         CFG:\n
-        CONDITION → IDENTIFIER OPERATOR VALUE
+        CONDITION → COLUMN_REF OPERATOR (VALUE | COLUMN_REF)
         """
         print("[Parser] Parsing CONDITION")
 
         ###
-        # Token must be an identifier, otherwise raise syntax error.
-        token = self.tokens.expect("IDENTIFIER")
-        column_name = token.value
-
-        # If token is an identifier, consume it and move forward.
-        self.tokens.consume()
+        # Parse COLUMN_REF.
+        column_name = self.parse_column_ref()
 
         ###
         # Next token must be OPERATOR, otherwise raise syntax error.
-        token = self.tokens.expect("OPERATOR")
-        operator = token.value
+        operator = self.tokens.expect("OPERATOR").value
 
         # If token is an OPERATOR, consume it and move forward.
         self.tokens.consume()
 
         ###
-        # Next token must be VALUE, otherwise raise syntax error.
-        value = self.parse_value()
+        # Next token can either be IDENTIFIER or VALUE, otherwise raise syntax error.
+
+        # Token must be IDENTIFIER
+        if self.tokens.match("IDENTIFIER"):
+            value = self.parse_column_ref()
+
+        # Token must be VALUE
+        else:
+            value = self.parse_value()
 
         return ConditionNode(column_name, operator, value)
+
+    def parse_column_ref(self):
+        """
+        Parse COLUMN_REF.
+
+        CFG:\n
+        COLUMN_REF → IDENTIFIER (DOT IDENTIFIER)?
+        """
+
+        print("[Parser] Parsing COLUMN_REF")
+
+        left = self.tokens.expect("IDENTIFIER").value
+        self.tokens.consume()
+
+        if self.tokens.match("DOT"):
+            self.tokens.consume()
+
+            right = self.tokens.expect("IDENTIFIER").value
+            self.tokens.consume()
+
+            return (left, right)
+
+        return left
 
     def parse_valuetuple(self):
         """
@@ -831,6 +876,41 @@ class Parser:
         value = self.parse_value()
 
         return (column, value)
+
+    def parse_join(self):
+        """
+        Parse JOIN clause.
+
+        CFG:\n
+        JOIN_CLAUSE → (INNER)? JOIN TABLE_NAME ON CONDITION
+                    | LEFT JOIN TABLE_NAME ON CONDITION
+                    | RIGHT JOIN TABLE_NAME ON CONDITION
+        """
+
+        print("[Parser] Parsing JOIN")
+
+        join_type = "INNER"
+        if self.tokens.match("INNER"):
+            self.tokens.consume()
+            join_type = "INNER"
+        elif self.tokens.match("LEFT"):
+            self.tokens.consume()
+            join_type = "LEFT"
+        elif self.tokens.match("RIGHT"):
+            self.tokens.consume()
+            join_type = "RIGHT"
+
+        self.tokens.expect("JOIN")
+        self.tokens.consume()
+
+        table_name = self.parse_table_ref()
+
+        self.tokens.expect("ON")
+        self.tokens.consume()
+
+        condition = self.parse_condition()
+
+        return JoinNode(join_type, table_name, condition)
 
     def parse_orderby(self):
         """
