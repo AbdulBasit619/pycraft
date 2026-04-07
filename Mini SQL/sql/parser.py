@@ -1,4 +1,4 @@
-# Grammar (Phase 6 - JOIN)
+# Grammar (Phase 7 - improved SELECT)
 #
 # SELECT_STATEMENT → SELECT COLUMN_LIST FROM TABLE_REF JOIN_CLAUSE* (WHERE EXPRESSION)? ORDER BY ORDER_LIST SEMICOLON?
 # CREATE_STATEMENT → CREATE DATABASE IDENTIFIER SEMICOLON?
@@ -12,7 +12,7 @@
 #                | DROP SCHEMA IDENTIFIER SEMICOLON?
 #                | DROP TABLE TABLE_REF SEMICOLON?
 #
-# COLUMN_LIST → * | IDENTIFIER ( COMMA IDENTIFIER )*
+# COLUMN_LIST → * | COLUMN_REF ( COMMA COLUMN_REF )*
 # COLUMN_DEF_LIST → COLUMN_DEF ( COMMA COLUMN_DEF )*
 # COLUMN_DEF → IDENTIFIER DATA_TYPE? (PRIMARY KEY)?
 # DATA_TYPE → TYPE_NAME TYPE_PARAM?
@@ -62,6 +62,7 @@ from sql.ast_nodes import (
     AlterNode,
     DropNode,
     JoinNode,
+    ColumnRefNode,
 )
 from utils.exceptions import ParserError
 
@@ -431,7 +432,7 @@ class Parser:
         Parse the table column.
 
         CFG:
-        COLUMN_LIST → * | IDENTIFIER (COMMA IDENTIFIER)*
+        COLUMN_LIST → * | COLUMN_REF ( COMMA COLUMN_REF )*
         """
         print("[Parser] Parsing COLUMN_LIST")
 
@@ -439,7 +440,14 @@ class Parser:
             self.tokens.consume()
             return AllColumnsNode()
 
-        columns = self.parse_column_names()
+        columns = []
+
+        columns.append(self.parse_column_ref())
+
+        while self.tokens.match("COMMA"):
+            self.tokens.consume()
+            columns.append(self.parse_column_ref())
+
         return columns
 
     def parse_column_names(self):
@@ -725,8 +733,16 @@ class Parser:
             value = self.parse_column_ref()
 
         # Token must be VALUE
-        else:
+        elif self.tokens.match("NUMBER") or self.tokens.match("STRING"):
             value = self.parse_value()
+
+        # Otherwise raise, syntax error.
+        else:
+            current = self.tokens.current()
+            raise ParserError(
+                f"Expected COLUMN_REF or VALUE, but found {current.type}",
+                position=current.position,
+            )
 
         return ConditionNode(column_name, operator, value)
 
@@ -749,9 +765,9 @@ class Parser:
             right = self.tokens.expect("IDENTIFIER").value
             self.tokens.consume()
 
-            return (left, right)
+            return ColumnRefNode(left, right)
 
-        return left
+        return ColumnRefNode(left)
 
     def parse_valuetuple(self):
         """
