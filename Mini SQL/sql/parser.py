@@ -1,4 +1,4 @@
-# Grammar (Phase 7 - improved SELECT)
+# Grammar (Phase 7 - Complete Minimal Parser)
 #
 # SELECT_STATEMENT → SELECT COLUMN_LIST FROM TABLE_REF JOIN_CLAUSE* (WHERE EXPRESSION)? ORDER BY ORDER_LIST SEMICOLON?
 # CREATE_STATEMENT → CREATE DATABASE IDENTIFIER SEMICOLON?
@@ -709,12 +709,6 @@ class Parser:
         # Next token must be IDENTIFIER, otherwise raise syntax error.
         if self.tokens.match("IDENTIFIER"):
             alias = self._eat("IDENTIFIER").value
-        else:
-            current = self.tokens.current()
-            raise ParserError(
-                f"Syntax error near '{current.value}': expected table name",
-                position=current.position,
-            )
 
         return TableRefNode(table_name, alias)
 
@@ -1036,23 +1030,23 @@ class Parser:
         join_type = "INNER"
         if self.tokens.match("INNER"):
             self.tokens.consume()
-            join_type = "INNER"
+            self._eat("JOIN")
         elif self.tokens.match("LEFT"):
             self.tokens.consume()
+            self._eat("JOIN")
             join_type = "LEFT"
         elif self.tokens.match("RIGHT"):
             self.tokens.consume()
             join_type = "RIGHT"
+            self._eat("JOIN")
+        elif self.tokens.match("JOIN"):
+            self.tokens.consume()
         else:
             current = self.tokens.current()
             raise ParserError(
                 f"Syntax error near '{current.value}': expected INNER, JOIN LEFT or RIGHT",
                 position=current.position,
             )
-
-        ###
-        # Next token must be JOIN, otherwise raise syntax error.  If token is JOIN, consume it and move forward.
-        self._eat("JOIN")
 
         ###
         # Recursively descent to parsing table.
