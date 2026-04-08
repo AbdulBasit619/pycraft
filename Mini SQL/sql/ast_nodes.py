@@ -73,7 +73,7 @@ class OrderByNode:
 
 
 class CreateNode:
-    """AST Node representing all CREATE query."""
+    """AST Node representing CREATE query."""
 
     def __init__(self, object_type, name, definition=None):
         self.object_type = object_type
