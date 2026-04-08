@@ -192,6 +192,17 @@ class JoinNode:
         return f"JoinNode(join_type={self.join_type}, table={self.table}, condition={self.condition})"
 
 
+class TableRefNode:
+    """AST Node representing TABLE_REF."""
+
+    def __init__(self, name, alias=None):
+        self.name = name
+        self.alias = alias
+
+    def __repr__(self):
+        return f"TableRefNode(name={self.name}, alias={self.alias})"
+
+
 class ColumnRefNode:
     """AST Node representing COLUMN_REF."""
 
@@ -203,3 +214,23 @@ class ColumnRefNode:
         if self.right:
             return f"ColumnRefNode(left={self.left}, right={self.right})"
         return f"ColumnRefNode(identifier={self.left})"
+
+
+class AggregateNode:
+    """AST Node for aggregate functions."""
+
+    def __init__(self, func, argument):
+        self.func = func
+        self.argument = argument  # ColumnRefNode or "*"
+
+    def __repr__(self):
+        return f"AggregateNode(func={self.func}, argument={self.argument})"
+
+
+class AssignmentNode:
+    def __init__(self, column, value):
+        self.column = column
+        self.value = value
+
+    def __repr__(self):
+        return f"AssignmentNode(column={self.column}, value={self.value})"

@@ -55,6 +55,9 @@ class TokenStream:
             return True
         return False
 
+    def match_any(self, *types):
+        return self.current().type in types
+
     def consume(self):
         """Return the current token and advance the stream by one."""
         token = self.current()

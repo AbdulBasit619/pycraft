@@ -12,7 +12,8 @@
 #                | DROP SCHEMA IDENTIFIER SEMICOLON?
 #                | DROP TABLE TABLE_REF SEMICOLON?
 #
-# COLUMN_LIST → * | COLUMN_REF ( COMMA COLUMN_REF )*
+# COLUMN_LIST → * | SELECT_ITEM ( COMMA SELECT_ITEM )*
+# SELECT_ITEM → COLUMN_REF | AGG_FUNC
 # COLUMN_DEF_LIST → COLUMN_DEF ( COMMA COLUMN_DEF )*
 # COLUMN_DEF → IDENTIFIER DATA_TYPE? (PRIMARY KEY)?
 # DATA_TYPE → TYPE_NAME TYPE_PARAM?
@@ -28,6 +29,10 @@
 #             | RIGHT JOIN TABLE_REF ON CONDITION
 #
 # TABLE_REF → IDENTIFIER (IDENTIFIER)?
+#
+# COLUMN_REF → IDENTIFIER (DOT IDENTIFIER)?
+#
+# AGG_FUNC → (COUNT | SUM | AVG | MIN | MAX) LPAREN (STAR | COLUMN_REF) RPAREN
 #
 # EXPRESSION → TERM ( (OR) TERM )*
 #
@@ -59,12 +64,24 @@ from sql.ast_nodes import (
     InsertNode,
     UpdateNode,
     DeleteNode,
+    AssignmentNode,
     AlterNode,
     DropNode,
     JoinNode,
+    TableRefNode,
     ColumnRefNode,
+    AggregateNode,
 )
 from utils.exceptions import ParserError
+
+
+# For testing reasons
+is_debug = True
+
+
+def log(msg):
+    if is_debug:
+        print(msg)
 
 
 class Parser:
@@ -75,20 +92,28 @@ class Parser:
 
     def parse(self):
         """Parse the token stream and return an AST"""
-        if self.tokens.match("SELECT"):
+        token_type = self.tokens.current().type
+
+        if token_type == "SELECT":
             return self.parse_select()
-        elif self.tokens.match("CREATE"):
+        elif token_type == "CREATE":
             return self.parse_create()
-        elif self.tokens.match("INSERT"):
+        elif token_type == "INSERT":
             return self.parse_insert()
-        elif self.tokens.match("UPDATE"):
+        elif token_type == "UPDATE":
             return self.parse_update()
-        elif self.tokens.match("DELETE"):
+        elif token_type == "DELETE":
             return self.parse_delete()
-        elif self.tokens.match("ALTER"):
+        elif token_type == "ALTER":
             return self.parse_alter()
-        elif self.tokens.match("DROP"):
+        elif token_type == "DROP":
             return self.parse_drop()
+        else:
+            current = self.tokens.current()
+            raise ParserError(
+                f"Syntax error near '{current.value}': expected a valid SQL statement (SELECT, INSERT, UPDATE, DELETE, ALTER, DROP)",
+                position=current.position,
+            )
 
     def parse_select(self):
         """
@@ -97,25 +122,19 @@ class Parser:
         CFG:\n
         SELECT_STATEMENT → SELECT COLUMN_LIST FROM TABLE JOIN_CLAUSE* (WHERE EXPRESSION)? ORDER BY ORDER_LIST SEMICOLON
         """
-        print("[Parser] Parsing SELECT statement")
+        log("[Parser] Parsing SELECT statement")
 
         ###
-        # First token must be SELECT, otherwise raise syntax error.
-        self.tokens.expect("SELECT")
-
-        # If first token is SELECT, consume it and move forward.
-        self.tokens.consume()
+        # First token must be SELECT, otherwise raise syntax error. If first token is SELECT, consume it and move forward.
+        self._eat("SELECT")
 
         ###
         # Recursively Descent to parsing column.
         columns = self.parse_columns()
 
         ###
-        # Next token must be FROM, otherwise raise syntax error.
-        self.tokens.expect("FROM")
-
-        # If next token is FROM, consume it and move forward.
-        self.tokens.consume()
+        # Next token must be FROM, otherwise raise syntax error. # If next token is FROM, consume it and move forward.
+        self._eat("FROM")
 
         ###
         # Recursively Descent to parsing table.
@@ -124,12 +143,7 @@ class Parser:
         ###
         # Optionally parse JOIN clause.
         joins = []
-        while (
-            self.tokens.match("JOIN")
-            or self.tokens.match("INNER")
-            or self.tokens.match("LEFT")
-            or self.tokens.match("RIGHT")
-        ):
+        while self.tokens.match_any("JOIN", "INNER", "LEFT", "RIGHT"):
             joins.append(self.parse_join())
 
         ###
@@ -160,25 +174,21 @@ class Parser:
         CREATE_STATEMENT → CREATE DATABASE IDENTIFIER SEMICOLON | CREATE SCHEMA IDENTIFIER SEMICOLON | CREATE TABLE TABLE_NAME LPAREN COLUMN_LIST RPAREN SEMICOLON
         """
 
-        print("[Parser] Parsing CREATE")
+        log("[Parser] Parsing CREATE")
 
-        # Next token must be CREATE, otherwise raise syntax error.
-        self.tokens.expect("CREATE")
-        # If token is CREATE, consume it and move forward.
-        self.tokens.consume()
+        # Next token must be CREATE, otherwise raise syntax error. If token is CREATE, consume it and move forward.
+        self._eat("CREATE")
 
         ###
         # Next token can either be DATABASE, SCHEMA or TABLE
 
         # Next token must be DATABASE, otherwise raise syntax error.
         if self.tokens.match("DATABASE"):
-
             # If token is DATABASE, consume it and move forward.
             self.tokens.consume()
 
             # Next token must be IDENTIFIER. If it is, store it's value, consume it and move forward.
-            database_name = self.tokens.expect("IDENTIFIER").value
-            self.tokens.consume()
+            database_name = self._eat("IDENTIFIER").value
 
             ###
             # Optionally parse SEMICOLON
@@ -188,13 +198,11 @@ class Parser:
 
         # Next token must be SCHEMA, otherwise raise syntax error.
         elif self.tokens.match("SCHEMA"):
-
             # If token is SCHEMA, consume it and move forward.
             self.tokens.consume()
 
             # Next token must be SCHEMA. If it is, store it's value, consume it and move forward.
-            schema_name = self.tokens.expect("IDENTIFIER").value
-            self.tokens.consume()
+            schema_name = self._eat("IDENTIFIER").value
 
             ###
             # Optionally parse SEMICOLON
@@ -204,18 +212,20 @@ class Parser:
 
         # Next token must be DATABASE, otherwise raise syntax error.
         elif self.tokens.match("TABLE"):
+            # If token is TABLE, consume it and move forward.
             self.tokens.consume()
 
-            table_name = self.tokens.expect("IDENTIFIER").value
-            self.tokens.consume()
+            # Next token must be IDENTIFIER. If it is, store it's value, consume it and move forward.
+            table_name = self._eat("IDENTIFIER").value
 
-            self.tokens.expect("LPAREN")
-            self.tokens.consume()
+            # Next token must be (. If it is, store it's value, consume it and move forward.
+            self._eat("LPAREN")
 
+            # Recursively descent to parsing columns.
             columns = self.parse_column_def_list()
 
-            self.tokens.expect("RPAREN")
-            self.tokens.consume()
+            # Next token must be ). If it is, store it's value, consume it and move forward.
+            self._eat("RPAREN")
 
             ###
             # Optionally parse SEMICOLON
@@ -223,8 +233,13 @@ class Parser:
 
             return CreateNode("TABLE", table_name, columns)
 
+        # Otherwise raise syntax error.
         else:
-            raise ParserError("Expected DATABASE, SCHEMA or TABLE")
+            current = self.tokens.current()
+            raise ParserError(
+                f"Syntax error near '{current.value}': expected DATABASE, SCHEMA or TABLE",
+                position=current.position,
+            )
 
     def parse_insert(self):
         """Parse the INSERT query.
@@ -233,27 +248,37 @@ class Parser:
         INSERT_STATEMENT → INSERT INTO TABLE_NAME ( COLUMN_NAMES )? VALUES VALUE_TUPLE (COMMA VALUE_TUPLE)* SEMICOLON?
         """
 
-        print("[Parser] Parsing INSERT query.")
+        log("[Parser] Parsing INSERT query.")
 
-        self.tokens.expect("INSERT")
-        self.tokens.consume()
+        ###
+        # Next token must be INSERT, otherwise raise syntax error. If token is INSERT, consume it and move forward.
+        self._eat("INSERT")
 
-        self.tokens.expect("INTO")
-        self.tokens.consume()
+        ###
+        # Next token must be INTO, otherwise raise syntax error. If token is INTO, consume it and move forward.
+        self._eat("INTO")
 
+        ###
+        # Recursively descent to parsing table.
         table_name = self.parse_table_ref()
 
+        ###
         columns = None
+        # Next token must be (, otherwise raise syntax error.
         if self.tokens.match("LPAREN"):
+            # If token is (, consume it and move forward.
             self.tokens.consume()
+
+            # Recursively descent to parsing columns.
             columns = self.parse_column_names()
+            # Next token must be ), otherwise raise syntax error. If token is ), consume it and move forward.
+            self._eat("RPAREN")
 
-            self.tokens.expect("RPAREN")
-            self.tokens.consume()
+        # Next token must be VALUES, otherwise raise syntax error. # If token is VALUES, consume it and move forward.
+        self._eat("VALUES")
 
-        self.tokens.expect("VALUES")
-        self.tokens.consume()
-
+        ###
+        # Recursively descent to parse rows.
         rows = []
 
         rows.append(self.parse_valuetuple())
@@ -263,6 +288,8 @@ class Parser:
             self.tokens.consume()
             rows.append(self.parse_valuetuple())
 
+        ###
+        # Optionally parse SEMICOLON
         self.parse_semicolon()
 
         return InsertNode(table_name, rows, columns)
@@ -275,24 +302,36 @@ class Parser:
         UPDATE_STATEMENT → UPDATE TABLE_NAME SET ASSIGNMENT_LIST (WHERE EXPRESSION)? SEMICOLON?
         """
 
-        print("[Parser] Parsing UPDATE")
+        log("[Parser] Parsing UPDATE")
 
-        self.tokens.expect("UPDATE")
-        self.tokens.consume()
+        ###
+        # Next token must be UPDATE, otherwise raise syntax error. If token is UPDATE, consume it and move forward.
+        self._eat("UPDATE")
 
+        ###
+        # Recursively descent to parsing table.
         table_name = self.parse_table_ref()
 
-        self.tokens.expect("SET")
-        self.tokens.consume()
+        ###
+        # Next token must be SET, otherwise raise syntax error. If token is SET, consume it and move forward.
+        self._eat("SET")
 
+        ###
+        # Recursively descent to parsing assignment list.
         assignment_list = self.parse_assignmentlist()
 
+        ###
+        # Optionally parse WHERE clause
         where_clause = None
+
+        # Next token must be WHERE, otherwise raise syntax error.
         if self.tokens.match("WHERE"):
+            ### Recursively descent to parsing WHERE clause.
             where_clause = self.parse_where()
 
-        if self.tokens.match("SEMICOLON"):
-            self.parse_semicolon()
+        ###
+        # Optionally parse SEMICOLON
+        self.parse_semicolon()
 
         return UpdateNode(table_name, assignment_list, where_clause)
 
@@ -304,22 +343,32 @@ class Parser:
         DELETE_STATEMENT → DELETE FROM TABLE_NAME (WHERE EXPRESSION)? SEMICOLON?
         """
 
-        print("[Parser] Parsing DELETE query.")
+        log("[Parser] Parsing DELETE query.")
 
-        self.tokens.expect("DELETE")
-        self.tokens.consume()
+        ###
+        # Next token must be DELETE, otherwise raise syntax error. If token is DELETE, consume it and move forward.
+        self._eat("DELETE")
 
-        self.tokens.expect("FROM")
-        self.tokens.consume()
+        ###
+        # Next token must be FROM, otherwise raise syntax error. If token is FROM, consume it and move forward.
+        self._eat("FROM")
 
+        ###
+        # Recursively descent to parsing table.
         table_name = self.parse_table_ref()
 
+        ###
+        # Optionally parse WHERE clause.
         where_clause = None
+
+        # Next token must be WHERE, otherwise raise syntax error.
         if self.tokens.match("WHERE"):
+            # Recursively descent to parsing WHERE ckause.
             where_clause = self.parse_where()
 
-        if self.tokens.match("SEMICOLON"):
-            self.parse_semicolon()
+        ###
+        # Optionally parse SEMICOLON
+        self.parse_semicolon()
 
         return DeleteNode(table_name, where_clause)
 
@@ -332,49 +381,68 @@ class Parser:
         ALTER_ACTION → ADD COLUMN COLUMN_DEF | DROP COLUMN IDENTIFIER
         """
 
-        print("[Parser] Parsing ALTER")
+        log("[Parser] Parsing ALTER")
 
-        self.tokens.expect("ALTER")
-        self.tokens.consume()
+        ###
+        # Next token must be ALTER, otherwise raise syntax error. If token is ALTER, consume it and move forward.
+        self._eat("ALTER")
 
-        self.tokens.expect("TABLE")
-        self.tokens.consume()
+        ###
+        # Next token must be TABLE, otherwise raise syntax error. If token is TABLE, consume it and move forward.
+        self._eat("TABLE")
 
+        ###
+        # Recursively descent to parsing table.
         table_name = self.parse_table_ref()
 
         action = payload = None
 
+        ###
+        # Recursively descent to parse ALTER_ACTION.
+
+        # Next token can either be ADD or DROP, otherwise raise syntax error.
+
+        # Next token must be ADD, otherwise raise syntax error.
         if self.tokens.match("ADD"):
+            # If token is ADD, consume it and move forward.
             self.tokens.consume()
 
-            self.tokens.expect("COLUMN")
-            self.tokens.consume()
+            # Next token must be COLUMN, otherwise raise syntax error. If token is COLUMN, consume it and move forward.
+            self._eat("COLUMN")
 
+            ###
+            # Recursively descent to parsing columns.
             column_def = self.parse_column_def()
 
             action = "ADD"
             payload = column_def
 
+        # Next token must be DROP, otherwise raise syntax error.
         elif self.tokens.match("DROP"):
+            # If token is ADD, consume it and move forward.
             self.tokens.consume()
 
-            self.tokens.expect("COLUMN")
-            self.tokens.consume()
+            # Next token must be COLUMN, otherwise raise syntax error. If token is COLUMN, consume it and move forward.
+            self._eat("COLUMN")
 
+            ###
+            # Parse column name.
             column_name = self.tokens.expect("IDENTIFIER").value
 
             action = "DROP"
             payload = column_name
 
+        # Otherwise raise syntax error.
         else:
             current = self.tokens.current()
             raise ParserError(
-                f"Expected ADD or DROP, but found {current.value}",
+                f"Syntax error near '{current.value}': expected ADD or DROP",
                 position=current.position,
             )
 
-        if self.tokens.match("SEMICOLON"):
-            self.parse_semicolon()
+        ###
+        # Optionally parse SEMICOLON
+        self.parse_semicolon()
 
         return AlterNode(table_name, action, payload)
 
@@ -383,47 +451,67 @@ class Parser:
         Parsing DROP query.
 
         CFG:\n
-        DROP_STATEMENT → DROP DATABASE IDENTIFIER SEMICOLON?
-                       | DROP SCHEMA IDENTIFIER SEMICOLON?
-                       | DROP TABLE TABLE_NAME SEMICOLON?
+        DROP_STATEMENT → DROP DATABASE IDENTIFIER SEMICOLON? | DROP SCHEMA IDENTIFIER SEMICOLON? | DROP TABLE TABLE_NAME SEMICOLON?
         """
 
-        print("[Parser] Parsing DROP query.")
+        log("[Parser] Parsing DROP query.")
 
-        self.tokens.expect("DROP")
-        self.tokens.consume()
+        ###
+        # Next token must be DROP, otherwise raise syntax error. If token is DROP, consume it and move forward.
+        self._eat("DROP")
 
         object_type = object_name = None
 
+        ###
+        # Next token can either be DATABASE, SCHEMA or TABLE.
+
+        # Next token must be DATABASE, otherwise raise syntax error.
         if self.tokens.match("DATABASE"):
+            # If token is DATABASE, consume it and move forward.
             self.tokens.consume()
 
+            # Parse object type and name
             object_type = "DATABASE"
             object_name = self.tokens.expect("IDENTIFIER").value
 
-            if self.tokens.match("SEMICOLON"):
-                self.parse_semicolon()
+            ###
+            # Optionally parse SEMICOLON
+            self.parse_semicolon()
 
+        # Next token must be SCHEMA, otherwise raise syntax error.
         elif self.tokens.match("SCHEMA"):
+            # If token is SCHEMA, consume it and move forward.
             self.tokens.consume()
 
+            # Parse object type and name
             object_type = "SCHEMA"
             object_name = self.tokens.expect("IDENTIFIER").value
 
-            if self.tokens.match("SEMICOLON"):
-                self.parse_semicolon()
+            ###
+            # Optionally parse SEMICOLON
+            self.parse_semicolon()
 
+        # Next token must be TABLE, otherwise raise syntax error.
         elif self.tokens.match("TABLE"):
+            # If token is TABLE, consume it and move forward.
             self.tokens.consume()
 
+            # Parse object type and name
             object_type = "TABLE"
             object_name = self.tokens.expect("IDENTIFIER").value
 
-            if self.tokens.match("SEMICOLON"):
-                self.parse_semicolon()
+            ###
+            # Optionally parse SEMICOLON
 
+            self.parse_semicolon()
+
+        # Otherwise raise syntax error.
         else:
-            pass
+            current = self.tokens.current()
+            raise ParserError(
+                f"Syntax error near '{current.value}': expected DATABASE, SCHEMA or TABLE",
+                position=current.position,
+            )
 
         return DropNode(object_type, object_name)
 
@@ -432,21 +520,30 @@ class Parser:
         Parse the table column.
 
         CFG:
-        COLUMN_LIST → * | COLUMN_REF ( COMMA COLUMN_REF )*
+        COLUMN_LIST → * | SELECT_ITEM ( COMMA SELECT_ITEM )*
         """
-        print("[Parser] Parsing COLUMN_LIST")
+        log("[Parser] Parsing COLUMN_LIST")
 
+        # Next token can either be * or select item.
+
+        # Next token must be *, otherwise raise syntax error.
         if self.tokens.match("STAR"):
+            # If token is *, consume it and move forward.
             self.tokens.consume()
+
             return AllColumnsNode()
 
+        ###
+        # Recursively descent to parsing columns.
         columns = []
 
-        columns.append(self.parse_column_ref())
+        columns.append(self.parse_select_item())
 
+        # Next token must be COMMA, otherwise raise syntax error.
         while self.tokens.match("COMMA"):
+            # If token is COMMA, consume it and move forward.
             self.tokens.consume()
-            columns.append(self.parse_column_ref())
+            columns.append(self.parse_select_item())
 
         return columns
 
@@ -458,20 +555,38 @@ class Parser:
         COLUMN_NAMES → IDENTIFIER (COMMA IDENTIFIER)*
         """
 
-        print("[Parser] Parsing COLUMN_NAMES")
+        log("[Parser] Parsing COLUMN_NAMES")
+
         columns = []
 
-        column_name = self.tokens.expect("IDENTIFIER").value
-        self.tokens.consume()
+        # Parse column name.  Consume current token and move forward.
+        column_name = self._eat("IDENTIFIER").value
+
         columns.append(column_name)
 
+        # Next token must be COMMA, otherwise raise syntax error.
         while self.tokens.match("COMMA"):
+            # If next token is COMMA, consume it and move forward.
             self.tokens.consume()
-            column_name = self.tokens.expect("IDENTIFIER").value
-            self.tokens.consume()
+
+            # Parse column name. Consume it and move forward.
+            column_name = self._eat("IDENTIFIER").value
+
             columns.append(column_name)
 
         return columns
+
+    def parse_select_item(self):
+        """
+        SELECT_ITEM → COLUMN_REF | AGG_FUNC
+        """
+
+        AGG_FUNCS = {"COUNT", "SUM", "AVG", "MIN", "MAX"}
+
+        if self.tokens.current().type in AGG_FUNCS:
+            return self.parse_aggregate_function()
+
+        return self.parse_column_ref()
 
     def parse_column_def_list(self):
         """
@@ -481,7 +596,7 @@ class Parser:
         COLUMN_DEF_LIST → COLUMN_DEF (COMMA COLUMN_DEF)*
         """
 
-        print("[Parser] Parsing COLUMN_DEF_LIST")
+        log("[Parser] Parsing COLUMN_DEF_LIST")
 
         columns = []
 
@@ -506,24 +621,29 @@ class Parser:
         COLUMN_DEF → IDENTIFIER DATA_TYPE (PRIMARY_KEY)?
         """
 
-        print("[Parser] Parsing COLUMN_DEF")
+        log("[Parser] Parsing COLUMN_DEF")
 
-        # Token must be an identifier, otherwise raise syntax error.
-        column_name = self.tokens.expect("IDENTIFIER").value
-        self.tokens.consume()
+        # Token must be an identifier, otherwise raise syntax error. If token is IDENTIFIER, consume it and move forward.
+        column_name = self._eat("IDENTIFIER").value
 
+        # Parse data type.
         data_type = None
-        if self.tokens.match(
-            "IDENTIFIER"
-        ) and self.tokens.current().value.upper() not in ("PRIMARY",):
+        if self.tokens.match("IDENTIFIER"):
             data_type = self.parse_datatype()
 
+        ###
+        # Optionally parse PRIMARY KEY flag.
+
+        # flag if primary key or not.
         is_primary = False
+
+        # Next token must be PRIMARY, otherwise raise syntax error.
         if self.tokens.match("PRIMARY"):
+            # If token is PRIMARY, consume it and move forward.
             self.tokens.consume()
 
-            self.tokens.expect("KEY")
-            self.tokens.consume()
+            # Next token must be KEY, otherwise raise syntax error. If token is KEY, consume it and move forward.
+            self._eat("KEY")
 
             is_primary = True
 
@@ -537,7 +657,7 @@ class Parser:
         DATA_TYPE → IDENTIFIER ( TYPE_PARAM )?
         """
 
-        print("[Parser] Parsing DATA_TYPE")
+        log("[Parser] Parsing DATA_TYPE")
 
         data_type = self.tokens.expect("IDENTIFIER").value
         self.tokens.consume()
@@ -556,16 +676,16 @@ class Parser:
         TYPE_PARAM → LPAREN NUMBER RPAREN
         """
 
-        print("[Parser] Parsing TYPE_PARAM")
+        log("[Parser] Parsing TYPE_PARAM")
 
-        self.tokens.expect("LPAREN")
-        self.tokens.consume()
+        # Next token must be (, otherwise raise syntax error. If token is (, consume it and move forward.
+        self._eat("LPAREN")
 
-        size = int(self.tokens.expect("NUMBER").value)
-        self.tokens.consume()
+        # Parse NUMBER
+        size = int(self._eat("NUMBER").value)
 
-        self.tokens.expect("RPAREN")
-        self.tokens.consume()
+        # Next token must be ), otherwise raise syntax error. If token is ), consume it and move forward.
+        self._eat("RPAREN")
 
         return size
 
@@ -576,33 +696,37 @@ class Parser:
         CFG:\n
         TABLE_REF → IDENTIFIER (IDENTIFIER)?
         """
-        print("[Parser] Parsing TABLE_REF")
+        log("[Parser] Parsing TABLE_REF")
 
-        # Token must be an identifier, otherwise raise syntax error.
-        table_name = self.tokens.expect("IDENTIFIER").value
+        ###
+        # Parse table name.  Consume the current token and move forward.
+        table_name = self._eat("IDENTIFIER").value
 
-        # If token is an identifier, consume it and move forward.
-        self.tokens.consume()
-
+        ###
+        # Parse alias
         alias = None
 
+        # Next token must be IDENTIFIER, otherwise raise syntax error.
         if self.tokens.match("IDENTIFIER"):
-            alias = self.tokens.consume().value
+            alias = self._eat("IDENTIFIER").value
+        else:
+            current = self.tokens.current()
+            raise ParserError(
+                f"Syntax error near '{current.value}': expected table name",
+                position=current.position,
+            )
 
-        return (table_name, alias)
+        return TableRefNode(table_name, alias)
 
     def parse_where(self):
         """
-        Parse the WHERE statement.
+        Parse the WHERE clause.
         """
 
-        print("[Parser] Parsing WHERE conditions.")
+        log("[Parser] Parsing WHERE conditions.")
 
-        # Token must be WHERE, otherwise raise syntax error.
-        self.tokens.expect("WHERE")
-
-        # If next token is WHERE, consume it and move forward.
-        self.tokens.consume()
+        # Token must be WHERE, otherwise raise syntax error. If next token is WHERE, consume it and move forward.
+        self._eat("WHERE")
 
         return self.parse_expression()
 
@@ -614,7 +738,7 @@ class Parser:
         EXPRESSION → TERM ( (OR) TERM )*
         """
 
-        print("[Parser] Parsing EXPRESSION")
+        log("[Parser] Parsing EXPRESSION")
 
         # Parse TERM
         left = self.parse_term()
@@ -642,7 +766,7 @@ class Parser:
         TERM → FACTOR ( (AND) FACTOR)*
         """
 
-        print("[Parser] Parsing TERM")
+        log("[Parser] Parsing TERM")
 
         # Parse FACTOR
         left = self.parse_factor()
@@ -667,12 +791,10 @@ class Parser:
         Parse the FACTOR.
 
         CFG:\n
-        FACTOR → NOT FACTOR
-               | CONDITION
-               | LPAREN EXPRESSION RPAREN
+        FACTOR → NOT FACTOR | CONDITION | LPAREN EXPRESSION RPAREN
         """
 
-        print("[Parser] Parsing FACTOR")
+        log("[Parser] Parsing FACTOR")
 
         # Token must be NOT, otherwise raise syntax error.
         if self.tokens.match("NOT"):
@@ -692,11 +814,8 @@ class Parser:
             # Parse EXPRESSION recursively.
             expr = self.parse_expression()
 
-            # Token must be ), otherwise raise syntax error.
-            self.tokens.expect("RPAREN")
-
-            # If token is ), consume it and move forward.
-            self.tokens.consume()
+            # Token must be ), otherwise raise syntax error. If token is ), consume it and move forward.
+            self._eat("RPAREN")
 
             # Return EXPRESSION
             return expr
@@ -712,18 +831,15 @@ class Parser:
         CFG:\n
         CONDITION → COLUMN_REF OPERATOR (VALUE | COLUMN_REF)
         """
-        print("[Parser] Parsing CONDITION")
+        log("[Parser] Parsing CONDITION")
 
         ###
         # Parse COLUMN_REF.
         column_name = self.parse_column_ref()
 
         ###
-        # Next token must be OPERATOR, otherwise raise syntax error.
-        operator = self.tokens.expect("OPERATOR").value
-
-        # If token is an OPERATOR, consume it and move forward.
-        self.tokens.consume()
+        # Next token must be OPERATOR, otherwise raise syntax error.  If token is an OPERATOR, consume it and move forward.
+        operator = self._eat("OPERATOR").value
 
         ###
         # Next token can either be IDENTIFIER or VALUE, otherwise raise syntax error.
@@ -740,7 +856,7 @@ class Parser:
         else:
             current = self.tokens.current()
             raise ParserError(
-                f"Expected COLUMN_REF or VALUE, but found {current.type}",
+                f"Syntax error near '{current.value}': expected column name or literal value",
                 position=current.position,
             )
 
@@ -754,16 +870,21 @@ class Parser:
         COLUMN_REF → IDENTIFIER (DOT IDENTIFIER)?
         """
 
-        print("[Parser] Parsing COLUMN_REF")
+        log("[Parser] Parsing COLUMN_REF")
 
-        left = self.tokens.expect("IDENTIFIER").value
-        self.tokens.consume()
+        # Parse left. # Consume current token and move forward.
+        left = self._eat("IDENTIFIER").value
 
+        ###
+        # Optionally parse (DOT IDENTIFIER)?
+
+        # Next token must be DOT, otherwise raise syntax error.
         if self.tokens.match("DOT"):
+            # If next token is DOT, consume it and move forward.
             self.tokens.consume()
 
-            right = self.tokens.expect("IDENTIFIER").value
-            self.tokens.consume()
+            # Parse right. Consume current token and move forward.
+            right = self._eat("IDENTIFIER").value
 
             return ColumnRefNode(left, right)
 
@@ -777,15 +898,16 @@ class Parser:
         VALUE_TUPLE → LPAREN VALUE_LIST RPAREN
         """
 
-        print("[Parser] Parsing VALUE_TUPLE")
+        log("[Parser] Parsing VALUE_TUPLE")
 
-        self.tokens.expect("LPAREN")
-        self.tokens.consume()
+        # Next token must be (, otherwise raise syntax error. If next token is (, consume it and move forward.
+        self._eat("LPAREN")
 
+        # Recursively descent to parse value list.
         row = self.parse_valuelist()
 
-        self.tokens.expect("RPAREN")
-        self.tokens.consume()
+        # Next token must be ), otherwise raise syntax error. If next token is ), consume it and move forward.
+        self._eat("RPAREN")
 
         return row
 
@@ -797,7 +919,7 @@ class Parser:
         VALUE_LIST → VALUE (COMMA VALUE)*
         """
 
-        print("[Parser] Parsing VALUE_LIST")
+        log("[Parser] Parsing VALUE_LIST")
 
         value_list = []
 
@@ -817,7 +939,7 @@ class Parser:
         VALUE → NUMBER | STRING
         """
 
-        print("[Parser] Parsing VALUEs")
+        log("[Parser] Parsing VALUEs")
 
         ###
         # Parse either a number or a string as value.
@@ -842,11 +964,11 @@ class Parser:
             # Remove surrounding quotes
             return token.value[1:-1]
 
+        # Otherwise raise syntax error.
         else:
-
             current = self.tokens.current()
             raise ParserError(
-                f"Expected NUMBER or STRING, but found {current.type}",
+                f"Syntax error near '{current.value}': expected numeric or string value",
                 position=current.position,
             )
 
@@ -858,7 +980,7 @@ class Parser:
         ASSIGNMENT_LIST → ASSIGNMENT ( COMMA ASSIGNMENT )*
         """
 
-        print("[Parser] Parsing ASSIGNMENT_LIST")
+        log("[Parser] Parsing ASSIGNMENT_LIST")
 
         assignments = []
 
@@ -878,33 +1000,39 @@ class Parser:
         ASSIGNMENT → IDENTIFIER OPERATOR VALUE
         """
 
-        print("[Parser] Parsing ASSIGNMENT")
+        log("[Parser] Parsing ASSIGNMENT")
 
-        column = self.tokens.expect("IDENTIFIER").value
-        self.tokens.consume()
+        # Parse column name. Consume current token and move forward.
+        column = self._eat("IDENTIFIER").value
 
-        operator = self.tokens.expect("OPERATOR").value
+        # Parse operator. # If operator is '=', consume it and move forward.
+        operator = self._eat("OPERATOR")
 
-        if operator != "=":
-            pass
-        self.tokens.consume()
+        ###
+        # Only '=' operator is allowed in assignment, otherwise raise syntax error.
+        if operator.value != "=":
+            current = self.tokens.current()
+            raise ParserError(
+                f"Syntax error near '{current.value}': expected '=' in assignment",
+                position=current.position,
+            )
 
+        # Parse value.
         value = self.parse_value()
 
-        return (column, value)
+        return AssignmentNode(column, value)
 
     def parse_join(self):
         """
         Parse JOIN clause.
 
         CFG:\n
-        JOIN_CLAUSE → (INNER)? JOIN TABLE_NAME ON CONDITION
-                    | LEFT JOIN TABLE_NAME ON CONDITION
-                    | RIGHT JOIN TABLE_NAME ON CONDITION
+        JOIN_CLAUSE → (INNER)? JOIN TABLE_NAME ON CONDITION | LEFT JOIN TABLE_NAME ON CONDITION | RIGHT JOIN TABLE_NAME ON CONDITION
         """
 
-        print("[Parser] Parsing JOIN")
+        log("[Parser] Parsing JOIN")
 
+        ### Starting token can either be INNER, LEFT or RIGHT, otherwise raise syntax error.
         join_type = "INNER"
         if self.tokens.match("INNER"):
             self.tokens.consume()
@@ -915,18 +1043,57 @@ class Parser:
         elif self.tokens.match("RIGHT"):
             self.tokens.consume()
             join_type = "RIGHT"
+        else:
+            current = self.tokens.current()
+            raise ParserError(
+                f"Syntax error near '{current.value}': expected INNER, JOIN LEFT or RIGHT",
+                position=current.position,
+            )
 
-        self.tokens.expect("JOIN")
-        self.tokens.consume()
+        ###
+        # Next token must be JOIN, otherwise raise syntax error.  If token is JOIN, consume it and move forward.
+        self._eat("JOIN")
 
+        ###
+        # Recursively descent to parsing table.
         table_name = self.parse_table_ref()
 
-        self.tokens.expect("ON")
-        self.tokens.consume()
+        ###
+        # Next token must be ON, otherwise raise syntax error. If token is ON, consume it and move forward.
+        self._eat("ON")
 
+        # Recursively descent to parsing cod=ndition.
         condition = self.parse_condition()
 
         return JoinNode(join_type, table_name, condition)
+
+    def parse_aggregate_function(self):
+        """
+        Parse AGG_FUNC.
+
+        CFG:\n
+        AGG_FUNC → (COUNT | SUM | AVG | MIN | MAX) LPAREN (STAR | COLUMN_REF) RPAREN
+        """
+
+        log("[Parser] Parsing AGG_FUNC")
+
+        # Determine function type.
+        func = self.tokens.consume().type
+
+        # Next token must be (, otherwise raise syntax error. If token is (, consume it and move forward.
+        self._eat("LPAREN")
+
+        # Argument: * or column
+        if self.tokens.match("STAR"):
+            self.tokens.consume()
+            argument = "*"
+        else:
+            argument = self.parse_column_ref()
+
+        # Next token must be ), otherwise raise syntax error. If token is ), consume it and move forward.
+        self._eat("RPAREN")
+
+        return AggregateNode(func, argument)
 
     def parse_orderby(self):
         """
@@ -934,29 +1101,28 @@ class Parser:
 
         CFG:
         ORDER_BY → ORDER BY ORDER_LIST
-
         ORDER_LIST → ORDER_ITEM (COMMA ORDER_ITEM)*
-
         ORDER_ITEM → IDENTIFIER (ASC | DESC)
         """
 
-        print("[Parser] Parsing ORDER BY")
+        log("[Parser] Parsing ORDER BY")
 
-        # Expect ORDER
-        self.tokens.expect("ORDER")
-        self.tokens.consume()
+        ###
+        # Next token must be ORDER, otherwise raise syntax error. If token is ORDER, consume it and move forward.
+        self._eat("ORDER")
 
-        # Expect BY
-        self.tokens.expect("BY")
-        self.tokens.consume()
+        ###
+        # Next token must be BY, otherwise raise syntax error. If token is BY, consume it and move forward.
+        self._eat("BY")
 
+        ###
+        # Parse items
         items = []
 
         # First item (mandatory)
-        token = self.tokens.expect("IDENTIFIER")
-        column_name = token.value
-        self.tokens.consume()
+        column_name = self._eat("IDENTIFIER").value
 
+        # Determine sorting direction
         direction = "ASC"
         if self.tokens.match("ASC"):
             self.tokens.consume()
@@ -970,9 +1136,7 @@ class Parser:
         while self.tokens.match("COMMA"):
             self.tokens.consume()
 
-            token = self.tokens.expect("IDENTIFIER")
-            column_name = token.value
-            self.tokens.consume()
+            column_name = self._eat("IDENTIFIER").value
 
             direction = "ASC"
             if self.tokens.match("ASC"):
@@ -991,3 +1155,11 @@ class Parser:
         """
         if self.tokens.match("SEMICOLON"):
             self.tokens.consume()
+
+    def _eat(self, token_type):
+        """
+        Helper for expect and consume code.
+        """
+        token = self.tokens.expect(token_type)
+        self.tokens.consume()
+        return token

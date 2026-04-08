@@ -49,6 +49,11 @@ class Lexer:
         "LEFT",
         "RIGHT",
         "ON",
+        "COUNT",
+        "SUM",
+        "AVG",
+        "MIN",
+        "MAX",
     }
 
     TOKEN_SPEC = [
@@ -87,21 +92,22 @@ class Lexer:
 
         for match in self.master_pattern.finditer(sql):
             start, end = match.span()
+            kind = match.lastgroup
+            value = match.group()
 
             # Detect unexpected characters between tokens
             if start > pos:
                 error_text = sql[pos:start]
                 raise UnexpectedCharacterError(
-                    f"Unexpected characters: '{error_text}'", position=pos
+                    f"Invalid or unexpected token near '{error_text}'",
+                    position=pos,
                 )
 
-            kind = match.lastgroup
             if kind is None:
-                raise LexerError(
-                    f"Unable to tokenize at position {start}", position=pos
+                raise UnexpectedCharacterError(
+                    f"Invalid or unexpected token near '{value}'",
+                    position=pos,
                 )
-
-            value = match.group()
 
             if kind == "SKIP":
                 pos = end
@@ -120,7 +126,7 @@ class Lexer:
         if pos < len(sql):
             error_text = sql[pos:]
             raise UnexpectedCharacterError(
-                f"Unexpected characters at end: '{error_text}'", position=pos
+                f"Unexpected characters: '{error_text}'", position=pos
             )
         tokens.append(Token("EOF", "", len(sql)))
 
